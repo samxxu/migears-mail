@@ -4,6 +4,10 @@
 
 A minimalist email sending library with zero required dependencies.
 
+> **Background**: miGears is the open-source successor of **TinyGears**, a
+> self-developed PHP framework. It was renamed and open-sourced recently because
+> the name *TinyGears* is already taken in the open-source community.
+
 ## Features
 
 - PHP 8.1+, using modern syntax (readonly, enums, type declarations)
