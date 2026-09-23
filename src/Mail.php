@@ -13,7 +13,7 @@ use MiGears\Mail\Exception\MailException;
  */
 class Mail
 {
-    public const VERSION = '2.0.1';
+    public const VERSION = '2.0.0';
 
     /**
      * @param list<string> $to
