@@ -1,6 +1,6 @@
 # migears/mail
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.0.1-blue)
 
 A minimalist email sending library with zero required dependencies.
 
@@ -117,7 +117,7 @@ MIT
 
 # migears/mail
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.0.1-blue)
 
 极简邮件发送库，零强制依赖。
 
