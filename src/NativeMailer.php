@@ -16,6 +16,9 @@ class NativeMailer implements MailerInterface
         if ($mail->to === []) {
             throw MailException::from('No recipient specified');
         }
+        if ($mail->from === '') {
+            throw MailException::from('No sender specified');
+        }
 
         $to = implode(', ', $mail->to);
         $subject = $mail->subject;

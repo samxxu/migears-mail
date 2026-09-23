@@ -10,8 +10,10 @@ A minimalist email sending library with zero required dependencies.
 - Zero required dependencies
 - Immutable mail message value object
 - Fluent chainable API
+- Email address validation on set (blocks CRLF header injection)
 - Supports HTML emails and attachments
 - Two built-in sending drivers: native `mail()` function and SMTP
+- SMTP transport can be injected for testing
 - PSR-4 autoloading compliant
 
 ## Installation
@@ -58,6 +60,8 @@ $smtpMailer->send($mail);
 
 All `with*` methods return a new `Mail` instance; the original instance remains unchanged.
 
+`withFrom` / `withTo` / `withCc` / `withBcc` / `withReplyTo` validate their email addresses (via `filter_var`) and throw `MailException` on invalid input. This also prevents CRLF header injection.
+
 | Method | Description |
 |--------|-------------|
 | `withFrom(string $email, string $name = '')` | Set the sender |
@@ -87,6 +91,10 @@ interface MailerInterface
 
 - **NativeMailer** - Uses PHP's native `mail()` function
 - **SmtpMailer** - Implements SMTP protocol using `fsockopen`, supports TLS/SSL and LOGIN authentication
+
+Both drivers require a non-empty sender (`from`). If `SmtpMailer` is configured with `encryption: 'tls'` but the server does not advertise `STARTTLS`, it throws `MailException` rather than falling back to plaintext — credentials are never transmitted unencrypted.
+
+For testing, `SmtpMailer` accepts an optional injected `MiGears\Mail\Transport\SmtpTransport` (see the `SocketSmtpTransport` default implementation).
 
 ### Exceptions
 
@@ -119,8 +127,10 @@ MIT
 - 零强制依赖
 - 不可变邮件消息值对象
 - 流畅的链式调用 API
+- 设置地址时校验邮箱格式（阻断 CRLF 头注入）
 - 支持 HTML 邮件和附件
 - 内置两种发送驱动：原生 `mail()` 函数和 SMTP
+- SMTP 传输层可注入以便测试
 - 符合 PSR-4 自动加载规范
 
 ## 安装
@@ -167,6 +177,8 @@ $smtpMailer->send($mail);
 
 所有 `with*` 方法返回新的 `Mail` 实例，原实例保持不变。
 
+`withFrom` / `withTo` / `withCc` / `withBcc` / `withReplyTo` 会（通过 `filter_var`）校验邮箱地址，非法输入抛 `MailException`；同时可阻断 CRLF 头注入。
+
 | 方法 | 说明 |
 |------|------|
 | `withFrom(string $email, string $name = '')` | 设置发件人 |
@@ -196,6 +208,10 @@ interface MailerInterface
 
 - **NativeMailer** - 使用 PHP 原生 `mail()` 函数
 - **SmtpMailer** - 使用 `fsockopen` 实现 SMTP 协议，支持 TLS/SSL 和 LOGIN 认证
+
+两个驱动都要求非空发件人（`from`）。若 `SmtpMailer` 配置了 `encryption: 'tls'` 但服务端未宣告 `STARTTLS`，会抛出 `MailException` 而非回退为明文——凭据绝不会以未加密方式传输。
+
+为便于测试，`SmtpMailer` 接受可选注入的 `MiGears\Mail\Transport\SmtpTransport`（默认实现为 `SocketSmtpTransport`）。
 
 ### 异常
 

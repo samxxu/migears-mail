@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MiGears\Mail\Tests;
 
 use PHPUnit\Framework\TestCase;
+use MiGears\Mail\Exception\MailException;
 use MiGears\Mail\Mail;
 
 final class MailTest extends TestCase
@@ -194,5 +195,60 @@ final class MailTest extends TestCase
 
         $this->expectException(\Error::class);
         $mail->subject = 'Changed'; // @phpstan-ignore-line
+    }
+
+    public function testInvalidFromAddressThrows(): void
+    {
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('Invalid from address');
+
+        (new Mail())->withFrom('not-an-email');
+    }
+
+    public function testInvalidToAddressThrows(): void
+    {
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('Invalid to address');
+
+        (new Mail())->withTo('valid@example.com', 'bad@');
+    }
+
+    public function testInvalidCcAddressThrows(): void
+    {
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('Invalid cc address');
+
+        (new Mail())->withCc('cc@');
+    }
+
+    public function testInvalidBccAddressThrows(): void
+    {
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('Invalid bcc address');
+
+        (new Mail())->withBcc('bcc@bad');
+    }
+
+    public function testInvalidReplyToAddressThrows(): void
+    {
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('Invalid reply-to address');
+
+        (new Mail())->withReplyTo('@example.com');
+    }
+
+    public function testCrlfInjectionInAddressThrows(): void
+    {
+        $this->expectException(MailException::class);
+
+        (new Mail())->withFrom("a@example.com\r\nBcc: victim@example.com");
+    }
+
+    public function testMultipleValidToAddressesPass(): void
+    {
+        $mail = (new Mail())
+            ->withTo('a@example.com', 'b@example.com', 'c+tag@example.com');
+
+        self::assertSame(['a@example.com', 'b@example.com', 'c+tag@example.com'], $mail->to);
     }
 }

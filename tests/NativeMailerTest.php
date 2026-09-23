@@ -22,6 +22,17 @@ final class NativeMailerTest extends TestCase
         $mailer->send($mail);
     }
 
+    public function testSendWithoutSenderThrowsException(): void
+    {
+        $mailer = new NativeMailer();
+        $mail = (new Mail())->withTo('to@example.com')->withSubject('Test');
+
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('No sender specified');
+
+        $mailer->send($mail);
+    }
+
     public function testImplementsMailerInterface(): void
     {
         $mailer = new NativeMailer();

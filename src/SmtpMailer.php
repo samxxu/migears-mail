@@ -5,15 +5,16 @@ declare(strict_types=1);
 namespace MiGears\Mail;
 
 use MiGears\Mail\Exception\MailException;
+use MiGears\Mail\Transport\SmtpTransport;
+use MiGears\Mail\Transport\SocketSmtpTransport;
 
 /**
- * SMTP mail sender implementation, directly implementing the SMTP protocol using fsockopen.
+ * SMTP mail sender implementation, directly implementing the SMTP protocol.
  * Supports LOGIN authentication, TLS/SSL encryption, attachments, and HTML emails.
+ * The transport can be injected for testing.
  */
 class SmtpMailer implements MailerInterface
 {
-    /** @var resource|null */
-    private $socket;
     private string $localhost;
 
     public function __construct(
@@ -23,6 +24,7 @@ class SmtpMailer implements MailerInterface
         private readonly string $password = '',
         private readonly string $encryption = '', // '', 'tls', 'ssl'
         private readonly int $timeout = 30,
+        private readonly ?SmtpTransport $transport = null,
     ) {
         $this->localhost = gethostname() ?: 'localhost';
     }
@@ -36,52 +38,45 @@ class SmtpMailer implements MailerInterface
             throw MailException::from('No sender specified');
         }
 
+        $transport = $this->transport ?? new SocketSmtpTransport();
         try {
-            $this->connect();
-            $this->ehlo();
-            $this->authenticate();
-            $this->cmd('MAIL FROM:<' . $mail->from . '>', '250');
+            $transport->connect($this->host, $this->port, $this->encryption, $this->timeout);
+            $this->ehlo($transport);
+            $this->authenticate($transport);
+            $this->cmd($transport, 'MAIL FROM:<' . $mail->from . '>', '250');
             foreach (array_merge($mail->to, $mail->cc, $mail->bcc) as $rcpt) {
-                $this->cmd('RCPT TO:<' . $rcpt . '>', '250');
+                $this->cmd($transport, 'RCPT TO:<' . $rcpt . '>', '250');
             }
-            $this->cmd('DATA', '354');
-            fwrite($this->socket, str_replace("\r\n.", "\r\n..", $this->buildMessage($mail)) . "\r\n");
-            $this->cmd('.', '250');
-            $this->cmd('QUIT', '221');
+            $this->cmd($transport, 'DATA', '354');
+            $transport->write(str_replace("\r\n.", "\r\n..", $this->buildMessage($mail)) . "\r\n");
+            $this->cmd($transport, '.', '250');
+            $this->cmd($transport, 'QUIT', '221');
         } finally {
-            $this->disconnect();
+            $transport->close();
         }
     }
 
-    private function connect(): void
+    private function ehlo(SmtpTransport $transport): void
     {
-        $host = $this->encryption === 'ssl' ? 'ssl://' . $this->host : $this->host;
-        $this->socket = @fsockopen($host, $this->port, $errno, $errstr, $this->timeout);
-        if ($this->socket === false) {
-            throw MailException::from("SMTP connection failed: $errstr ($errno)");
-        }
-        stream_set_timeout($this->socket, $this->timeout);
-        $this->expect('220');
-    }
-
-    private function ehlo(): void
-    {
-        $response = $this->cmd('EHLO ' . $this->localhost, '250');
-        if ($this->encryption === 'tls' && str_contains($response, '250-STARTTLS')) {
-            $this->cmd('STARTTLS', '220');
-            stream_socket_enable_crypto($this->socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
-            $this->cmd('EHLO ' . $this->localhost, '250');
+        $response = $this->cmd($transport, 'EHLO ' . $this->localhost, '250');
+        if ($this->encryption === 'tls') {
+            if (!str_contains($response, '250-STARTTLS')) {
+                throw MailException::from('Server does not support STARTTLS but TLS was requested');
+            }
+            $this->cmd($transport, 'STARTTLS', '220');
+            $transport->enableTls();
+            $this->cmd($transport, 'EHLO ' . $this->localhost, '250');
         }
     }
 
-    private function authenticate(): void
+    private function authenticate(SmtpTransport $transport): void
     {
         if ($this->username === '' || $this->password === '') {
             return;
         }
-        $this->cmd('AUTH LOGIN', '334');
-        $this->cmd(base64_encode($this->username), '334');
-        $this->cmd(base64_encode($this->password), '235');
+        $this->cmd($transport, 'AUTH LOGIN', '334');
+        $this->cmd($transport, base64_encode($this->username), '334');
+        $this->cmd($transport, base64_encode($this->password), '235');
     }
 
     private function buildMessage(Mail $mail): string
@@ -164,17 +159,17 @@ class SmtpMailer implements MailerInterface
             : $subject;
     }
 
-    private function cmd(string $command, string $expected): string
+    private function cmd(SmtpTransport $transport, string $command, string $expected): string
     {
-        fwrite($this->socket, $command . "\r\n");
-        return $this->expect($expected);
+        $transport->write($command . "\r\n");
+        return $this->expect($transport, $expected);
     }
 
-    private function expect(string $expectedCode): string
+    private function expect(SmtpTransport $transport, string $expectedCode): string
     {
         $response = '';
         $line = false;
-        while (($line = fgets($this->socket, 512)) !== false) {
+        while (($line = $transport->readLine()) !== false) {
             $response .= $line;
             if (substr($line, 3, 1) === ' ') {
                 break;
@@ -190,13 +185,5 @@ class SmtpMailer implements MailerInterface
             );
         }
         return $response;
-    }
-
-    private function disconnect(): void
-    {
-        if (is_resource($this->socket)) {
-            fclose($this->socket);
-            $this->socket = null;
-        }
     }
 }

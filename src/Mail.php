@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MiGears\Mail;
 
+use MiGears\Mail\Exception\MailException;
+
 /**
  * Immutable mail message value object. Uses with* chained calls, each returning a new instance.
  *
@@ -38,27 +40,45 @@ class Mail
 
     public function withFrom(string $email, string $name = ''): self
     {
+        self::validateEmail($email, 'from');
         return $this->copy(from: $email, fromName: $name);
     }
 
     public function withTo(string ...$emails): self
     {
+        foreach ($emails as $email) {
+            self::validateEmail($email, 'to');
+        }
         return $this->copy(to: $emails);
     }
 
     public function withCc(string ...$emails): self
     {
+        foreach ($emails as $email) {
+            self::validateEmail($email, 'cc');
+        }
         return $this->copy(cc: $emails);
     }
 
     public function withBcc(string ...$emails): self
     {
+        foreach ($emails as $email) {
+            self::validateEmail($email, 'bcc');
+        }
         return $this->copy(bcc: $emails);
     }
 
     public function withReplyTo(string $email): self
     {
+        self::validateEmail($email, 'reply-to');
         return $this->copy(replyTo: $email);
+    }
+
+    private static function validateEmail(string $email, string $field): void
+    {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw MailException::from("Invalid $field address: $email");
+        }
     }
 
     public function withSubject(string $subject): self
