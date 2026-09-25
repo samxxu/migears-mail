@@ -122,9 +122,11 @@ class Mail
     public function getFormattedFrom(): string
     {
         $name = str_replace(["\r", "\n"], '', $this->fromName);
-        return $name !== ''
-            ? sprintf('"%s" <%s>', $name, $this->from)
-            : $this->from;
+        if ($name === '') {
+            return $this->from;
+        }
+        $name = str_replace(['\\', '"'], ['\\\\', '\\"'], $name);
+        return sprintf('"%s" <%s>', $name, $this->from);
     }
 
     private function copy(

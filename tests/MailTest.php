@@ -186,6 +186,18 @@ final class MailTest extends TestCase
         self::assertSame('"EvilBcc: victim@example.com" <test@example.com>', $mail->getFormattedFrom());
     }
 
+    public function testGetFormattedFromEscapesQuoteInName(): void
+    {
+        $mail = (new Mail())->withFrom('from@example.com', 'x" <attacker@evil.com>, "');
+        self::assertSame('"x\" <attacker@evil.com>, \"" <from@example.com>', $mail->getFormattedFrom());
+    }
+
+    public function testGetFormattedFromEscapesBackslashInName(): void
+    {
+        $mail = (new Mail())->withFrom('from@example.com', 'Back\\slash');
+        self::assertSame('"Back\\\\slash" <from@example.com>', $mail->getFormattedFrom());
+    }
+
     public function testWithToReplacesNotAppends(): void
     {
         $mail = (new Mail())->withTo('first@example.com');
