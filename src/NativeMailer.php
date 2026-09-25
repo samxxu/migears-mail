@@ -53,14 +53,28 @@ class NativeMailer implements MailerInterface
         }
 
         $headers['MIME-Version'] = '1.0';
-        $headers['Content-Type'] = sprintf('%s; charset=%s', $mail->getContentType(), $mail->charset);
+        $headers['Content-Type'] = sprintf('%s; charset=%s', $mail->getContentType(), $this->stripCrlf($mail->charset));
         $headers['X-Mailer'] = 'miGears-Mail';
 
         $lines = [];
         foreach ($headers as $name => $value) {
-            $lines[] = sprintf('%s: %s', $name, $value);
+            $lines[] = sprintf('%s: %s', $this->sanitizeHeaderName($name), $this->stripCrlf($value));
         }
 
         return implode("\r\n", $lines);
+    }
+
+    private function stripCrlf(string $value): string
+    {
+        return str_replace(["\r", "\n"], '', $value);
+    }
+
+    private function sanitizeHeaderName(string $name): string
+    {
+        $name = $this->stripCrlf($name);
+        if ($name === '' || str_contains($name, ':')) {
+            throw MailException::from("Invalid custom header name: $name");
+        }
+        return $name;
     }
 }

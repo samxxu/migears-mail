@@ -112,4 +112,92 @@ final class NativeMailerTest extends TestCase
 
         self::assertStringNotContainsString('From:', $mailer->capturedHeaders);
     }
+
+    public function testBuildHeadersStripsCrlfFromCustomHeaderValue(): void
+    {
+        $mailer = new class extends NativeMailer {
+            public string $capturedHeaders = '';
+
+            public function send(Mail $mail): void
+            {
+                $this->capturedHeaders = $this->buildHeaders($mail);
+            }
+        };
+
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withHeaders(['X-Custom' => "safe\r\nBcc: evil@example.com"]);
+
+        $mailer->send($mail);
+
+        self::assertStringNotContainsString("\r\nBcc: ", $mailer->capturedHeaders);
+        self::assertStringContainsString('X-Custom: safeBcc: evil@example.com', $mailer->capturedHeaders);
+    }
+
+    public function testBuildHeadersRejectsColonInCustomHeaderName(): void
+    {
+        $mailer = new class extends NativeMailer {
+            public function send(Mail $mail): void
+            {
+                $this->buildHeaders($mail);
+            }
+        };
+
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withHeaders(['Bcc: evil@example.com' => 'x']);
+
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('Invalid custom header name');
+
+        $mailer->send($mail);
+    }
+
+    public function testBuildHeadersStripsCrlfFromCharset(): void
+    {
+        $mailer = new class extends NativeMailer {
+            public string $capturedHeaders = '';
+
+            public function send(Mail $mail): void
+            {
+                $this->capturedHeaders = $this->buildHeaders($mail);
+            }
+        };
+
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withCharset("utf-8\r\nBcc: evil@example.com");
+
+        $mailer->send($mail);
+
+        self::assertStringNotContainsString("\r\nBcc: ", $mailer->capturedHeaders);
+    }
+
+    public function testBuildHeadersStripsCrlfFromFromName(): void
+    {
+        $mailer = new class extends NativeMailer {
+            public string $capturedHeaders = '';
+
+            public function send(Mail $mail): void
+            {
+                $this->capturedHeaders = $this->buildHeaders($mail);
+            }
+        };
+
+        $mail = (new Mail())
+            ->withFrom('from@example.com', "Sender\r\nBcc: evil@example.com")
+            ->withTo('to@example.com')
+            ->withSubject('Test');
+
+        $mailer->send($mail);
+
+        self::assertStringNotContainsString("\r\nBcc: ", $mailer->capturedHeaders);
+        self::assertSame(1, substr_count($mailer->capturedHeaders, 'From: '));
+    }
 }

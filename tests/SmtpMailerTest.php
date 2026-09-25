@@ -14,7 +14,7 @@ final class SmtpMailerTest extends TestCase
     /** @return list<string> Standard happy-path responses for a single-recipient send. */
     private static function happyPathResponses(): array
     {
-        return ['250 ok', '250 ok', '250 ok', '354 ok', '250 ok', '221 ok'];
+        return ['220 ready', '250 ok', '250 ok', '250 ok', '354 ok', '250 ok', '221 ok'];
     }
 
     public function testSendWithoutRecipientsThrowsException(): void
@@ -93,7 +93,7 @@ final class SmtpMailerTest extends TestCase
     public function testSendSendsRcptsForToCcAndBcc(): void
     {
         $transport = new FakeSmtpTransport();
-        $transport->responses = ['250 ok', '250 ok', '250 ok', '250 ok', '250 ok', '354 ok', '250 ok', '221 ok'];
+        $transport->responses = ['220 ready', '250 ok', '250 ok', '250 ok', '250 ok', '250 ok', '354 ok', '250 ok', '221 ok'];
 
         $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
         $mail = (new Mail())
@@ -183,9 +183,10 @@ final class SmtpMailerTest extends TestCase
     {
         $transport = new FakeSmtpTransport();
         $transport->responses = [
-            '250-STARTTLS', '250 ok',          // EHLO advertises STARTTLS
-            '220 ready',                        // STARTTLS response
-            '250 ok',                           // second EHLO
+            '220 ready',                    // server greeting
+            '250-STARTTLS', '250 ok',        // EHLO advertises STARTTLS
+            '220 ready',                     // STARTTLS response
+            '250 ok',                        // second EHLO
             '250 ok', '250 ok', '354 ok', '250 ok', '221 ok',
         ];
 
@@ -206,7 +207,7 @@ final class SmtpMailerTest extends TestCase
     public function testTlsRequestedButUnsupportedThrows(): void
     {
         $transport = new FakeSmtpTransport();
-        $transport->responses = ['250 ok']; // no 250-STARTTLS advertised
+        $transport->responses = ['220 ready', '250 ok']; // no 250-STARTTLS advertised
 
         $mailer = new SmtpMailer('smtp.example.com', 25, encryption: 'tls', transport: $transport);
         $mail = (new Mail())
@@ -229,10 +230,11 @@ final class SmtpMailerTest extends TestCase
     {
         $transport = new FakeSmtpTransport();
         $transport->responses = [
-            '250 ok',   // EHLO
-            '334 ',     // AUTH LOGIN
-            '334 ',     // username
-            '235 ok',   // password accepted
+            '220 ready',   // server greeting
+            '250 ok',      // EHLO
+            '334 ',        // AUTH LOGIN
+            '334 ',        // username
+            '235 ok',      // password accepted
             '250 ok', '250 ok', '354 ok', '250 ok', '221 ok',
         ];
 
@@ -269,7 +271,7 @@ final class SmtpMailerTest extends TestCase
     public function testSendWhenServerReturnsErrorThrows(): void
     {
         $transport = new FakeSmtpTransport();
-        $transport->responses = ['250 ok', '250 ok', '550 mailbox unavailable'];
+        $transport->responses = ['220 ready', '250 ok', '250 ok', '550 mailbox unavailable'];
 
         $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
         $mail = (new Mail())
@@ -298,5 +300,143 @@ final class SmtpMailerTest extends TestCase
         $this->expectExceptionMessage('SMTP connection closed unexpectedly');
 
         $mailer->send($mail);
+    }
+
+    public function testEncryptionModeIsCaseInsensitive(): void
+    {
+        $transport = new FakeSmtpTransport();
+        $transport->responses = [
+            '220 ready', '250-STARTTLS', '250 ok', '220 ready', '250 ok',
+            '250 ok', '250 ok', '354 ok', '250 ok', '221 ok',
+        ];
+
+        $mailer = new SmtpMailer('smtp.example.com', 25, encryption: 'TLS', transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('TLS');
+
+        $mailer->send($mail);
+
+        self::assertTrue($transport->tlsEnabled);
+        self::assertStringContainsString('STARTTLS', $transport->payload());
+    }
+
+    public function testInvalidEncryptionModeThrows(): void
+    {
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('Unsupported SMTP encryption mode');
+
+        new SmtpMailer('smtp.example.com', 25, encryption: 'sssl');
+    }
+
+    public function testFromNameWithCrlfIsStripped(): void
+    {
+        $transport = new FakeSmtpTransport();
+        $transport->responses = self::happyPathResponses();
+
+        $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com', "From Name\r\nBcc: evil@example.com")
+            ->withTo('to@example.com')
+            ->withSubject('Test');
+
+        $mailer->send($mail);
+
+        $payload = $transport->payload();
+        self::assertStringNotContainsString("\r\nBcc: ", $payload);
+        self::assertSame(1, substr_count($payload, 'From: '));
+    }
+
+    public function testSubjectWithCrlfIsStripped(): void
+    {
+        $transport = new FakeSmtpTransport();
+        $transport->responses = self::happyPathResponses();
+
+        $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject("Hi\r\nBcc: evil@example.com");
+
+        $mailer->send($mail);
+
+        self::assertStringNotContainsString("\r\nBcc: ", $transport->payload());
+    }
+
+    public function testCustomHeaderValueWithCrlfIsStripped(): void
+    {
+        $transport = new FakeSmtpTransport();
+        $transport->responses = self::happyPathResponses();
+
+        $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withHeaders(['X-Custom' => "safe\r\nBcc: evil@example.com"]);
+
+        $mailer->send($mail);
+
+        self::assertStringNotContainsString("\r\nBcc: ", $transport->payload());
+    }
+
+    public function testCustomHeaderNameWithColonThrows(): void
+    {
+        $transport = new FakeSmtpTransport();
+        $transport->responses = self::happyPathResponses();
+
+        $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withHeaders(['Bcc: evil@example.com' => 'x']);
+
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('Invalid custom header name');
+
+        $mailer->send($mail);
+    }
+
+    public function testCharsetWithCrlfIsStripped(): void
+    {
+        $transport = new FakeSmtpTransport();
+        $transport->responses = self::happyPathResponses();
+
+        $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withCharset("utf-8\r\nBcc: evil@example.com");
+
+        $mailer->send($mail);
+
+        self::assertStringNotContainsString("\r\nBcc: ", $transport->payload());
+    }
+
+    public function testAttachmentNameWithCrlfIsStripped(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'mail') . '.txt';
+        file_put_contents($file, 'x');
+
+        try {
+            $transport = new FakeSmtpTransport();
+            $transport->responses = self::happyPathResponses();
+
+            $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
+            $mail = (new Mail())
+                ->withFrom('from@example.com')
+                ->withTo('to@example.com')
+                ->withSubject('Test')
+                ->withAttachment($file, "doc.txt\r\nBcc: evil@example.com", 'text/plain');
+
+            $mailer->send($mail);
+
+            self::assertStringNotContainsString("\r\nBcc: ", $transport->payload());
+        } finally {
+            @unlink($file);
+        }
     }
 }

@@ -121,8 +121,9 @@ class Mail
 
     public function getFormattedFrom(): string
     {
-        return $this->fromName !== ''
-            ? sprintf('"%s" <%s>', $this->fromName, $this->from)
+        $name = str_replace(["\r", "\n"], '', $this->fromName);
+        return $name !== ''
+            ? sprintf('"%s" <%s>', $name, $this->from)
             : $this->from;
     }
 

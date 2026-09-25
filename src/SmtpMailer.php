@@ -15,6 +15,7 @@ use MiGears\Mail\Transport\SocketSmtpTransport;
  */
 class SmtpMailer implements MailerInterface
 {
+    private readonly string $encryption;
     private string $localhost;
 
     public function __construct(
@@ -22,10 +23,14 @@ class SmtpMailer implements MailerInterface
         private readonly int $port = 25,
         private readonly string $username = '',
         private readonly string $password = '',
-        private readonly string $encryption = '', // '', 'tls', 'ssl'
+        string $encryption = '', // '', 'tls', 'ssl'
         private readonly int $timeout = 30,
         private readonly ?SmtpTransport $transport = null,
     ) {
+        $this->encryption = strtolower($encryption);
+        if (!in_array($this->encryption, ['', 'tls', 'ssl'], true)) {
+            throw MailException::from("Unsupported SMTP encryption mode: $encryption");
+        }
         $this->localhost = gethostname() ?: 'localhost';
     }
 
@@ -41,6 +46,7 @@ class SmtpMailer implements MailerInterface
         $transport = $this->transport ?? new SocketSmtpTransport();
         try {
             $transport->connect($this->host, $this->port, $this->encryption, $this->timeout);
+            $this->expect($transport, '220');
             $this->ehlo($transport);
             $this->authenticate($transport);
             $this->cmd($transport, 'MAIL FROM:<' . $mail->from . '>', '250');
@@ -104,19 +110,19 @@ class SmtpMailer implements MailerInterface
         if ($boundary) {
             $headers['Content-Type'] = 'multipart/mixed; boundary="' . $boundary . '"';
         } else {
-            $headers['Content-Type'] = $mail->getContentType() . '; charset=' . $mail->charset;
+            $headers['Content-Type'] = $mail->getContentType() . '; charset=' . $this->stripCrlf($mail->charset);
             $headers['Content-Transfer-Encoding'] = 'base64';
         }
 
         $lines = [];
         foreach ($headers as $name => $value) {
-            $lines[] = "$name: $value";
+            $lines[] = $this->sanitizeHeaderName($name) . ': ' . $this->stripCrlf($value);
         }
 
         $body = "\r\n";
         if ($boundary) {
             $body .= '--' . $boundary . "\r\n";
-            $body .= 'Content-Type: ' . $mail->getContentType() . '; charset=' . $mail->charset . "\r\n";
+            $body .= 'Content-Type: ' . $mail->getContentType() . '; charset=' . $this->stripCrlf($mail->charset) . "\r\n";
             $body .= "Content-Transfer-Encoding: base64\r\n\r\n";
             $body .= chunk_split(base64_encode($mail->body)) . "\r\n";
             foreach ($mail->attachments as $att) {
@@ -134,8 +140,8 @@ class SmtpMailer implements MailerInterface
     private function buildAttachmentPart(array $att, string $boundary): string
     {
         $filePath = $att['path'];
-        $fileName = $att['name'] ?? basename($filePath);
-        $mimeType = $att['type'] ?? 'application/octet-stream';
+        $fileName = $this->stripCrlf($att['name'] ?? basename($filePath));
+        $mimeType = $this->stripCrlf($att['type'] ?? 'application/octet-stream');
 
         if (!is_file($filePath)) {
             throw MailException::from("Attachment not found: $filePath");
@@ -155,8 +161,22 @@ class SmtpMailer implements MailerInterface
     private function encodeSubject(string $subject, string $charset): string
     {
         return preg_match('/[^\x20-\x7E]/', $subject)
-            ? sprintf('=?%s?B?%s?=', $charset, base64_encode($subject))
-            : $subject;
+            ? sprintf('=?%s?B?%s?=', $this->stripCrlf($charset), base64_encode($subject))
+            : $this->stripCrlf($subject);
+    }
+
+    private function stripCrlf(string $value): string
+    {
+        return str_replace(["\r", "\n"], '', $value);
+    }
+
+    private function sanitizeHeaderName(string $name): string
+    {
+        $name = $this->stripCrlf($name);
+        if ($name === '' || str_contains($name, ':')) {
+            throw MailException::from("Invalid custom header name: $name");
+        }
+        return $name;
     }
 
     private function cmd(SmtpTransport $transport, string $command, string $expected): string
