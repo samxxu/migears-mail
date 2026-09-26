@@ -98,9 +98,9 @@ interface MailerInterface
 
 Both drivers require a non-empty sender (`from`). If `SmtpMailer` is configured with `encryption: 'tls'` but the server does not advertise `STARTTLS`, it throws `MailException` rather than falling back to plaintext — credentials are never transmitted unencrypted. The encryption mode is case-insensitive and any value other than `''`/`tls`/`ssl` is rejected at construction.
 
-All user-supplied values that end up in message headers (display name, subject, custom header names/values, charset, attachment names and types) have CR/LF characters stripped at serialization time, so no injected header line (e.g. `Bcc:`) can be smuggled in. Custom header names containing `:` are rejected.
+All user-supplied values that end up in message headers (display name, subject, custom header names/values, charset, attachment names and types) have CR/LF characters stripped at serialization time by the mailer driver, so no injected header line (e.g. `Bcc:`) can be smuggled in. Custom header names containing `:` are rejected. The `Mail` value object itself is wire-format agnostic and performs no CRLF filtering — header-safety is a driver responsibility.
 
-The display name is additionally escaped (`\` and `"`) before being wrapped in quotes, so it cannot break out of `"..."` and inject extra addresses into the `From` header.
+The display name is additionally escaped (`\` and `"`) by `Mail::getFormattedFrom()` before being wrapped in quotes, so it cannot break out of `"..."` and inject extra addresses into the `From` header.
 
 For testing, `SmtpMailer` accepts an optional injected `MiGears\Mail\Transport\SmtpTransport` (see the `SocketSmtpTransport` default implementation).
 
@@ -219,9 +219,9 @@ interface MailerInterface
 
 两个驱动都要求非空发件人（`from`）。若 `SmtpMailer` 配置了 `encryption: 'tls'` 但服务端未宣告 `STARTTLS`，会抛出 `MailException` 而非回退为明文——凭据绝不会以未加密方式传输。加密模式大小写不敏感，构造时仅接受 `''`/`tls`/`ssl`，其他值直接抛异常。
 
-所有会进入邮件头的用户输入（显示名、主题、自定义头名与值、charset、附件名与类型）在序列化时都会剥离 CR/LF 字符，因此无法注入额外的头部行（如 `Bcc:`）。含冒号的自定义头名会被拒绝。
+所有会进入邮件头的用户输入（显示名、主题、自定义头名与值、charset、附件名与类型）在序列化时由 Mailer 驱动剥离 CR/LF 字符，因此无法注入额外的头部行（如 `Bcc:`）。含冒号的自定义头名会被拒绝。`Mail` 值对象本身与传输格式无关，不做 CRLF 过滤——头部安全是驱动层的职责。
 
-显示名还会在包裹引号前转义 `\` 与 `"`，因此无法突破 `"..."` 向 `From` 头注入额外地址。
+显示名的 `\` 与 `"` 转义由 `Mail::getFormattedFrom()` 完成（属格式化职责），因此无法突破 `"..."` 向 `From` 头注入额外地址。
 
 为便于测试，`SmtpMailer` 接受可选注入的 `MiGears\Mail\Transport\SmtpTransport`（默认实现为 `SocketSmtpTransport`）。
 

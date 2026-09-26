@@ -180,12 +180,6 @@ final class MailTest extends TestCase
         self::assertSame('test@example.com', $mail->getFormattedFrom());
     }
 
-    public function testGetFormattedFromStripsCrlfFromName(): void
-    {
-        $mail = (new Mail())->withFrom('test@example.com', "Evil\r\nBcc: victim@example.com");
-        self::assertSame('"EvilBcc: victim@example.com" <test@example.com>', $mail->getFormattedFrom());
-    }
-
     public function testGetFormattedFromEscapesQuoteInName(): void
     {
         $mail = (new Mail())->withFrom('from@example.com', 'x" <attacker@evil.com>, "');
