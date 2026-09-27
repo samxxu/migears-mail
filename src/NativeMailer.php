@@ -21,16 +21,25 @@ class NativeMailer implements MailerInterface
         }
 
         $to = implode(', ', $mail->to);
-        $subject = $this->stripCrlf($mail->subject);
+        $subject = $this->encodeSubject($mail->subject, $mail->charset);
         $boundary = $mail->hasAttachments() ? '----=_Part_' . md5(uniqid()) : null;
         $body = $this->buildBody($mail, $boundary);
         $headers = $this->buildHeaders($mail, $boundary);
 
-        $result = @mail($to, $subject, $body, $headers);
+        $result = $this->deliver($to, $subject, $body, $headers);
 
         if ($result === false) {
             throw MailException::from('Failed to send mail via native mail() function');
         }
+    }
+
+    /**
+     * Thin seam over mail() so tests can assert the exact arguments that
+     * would be handed to the MTA. Override in a subclass to capture them.
+     */
+    protected function deliver(string $to, string $subject, string $body, string $headers): bool
+    {
+        return @mail($to, $subject, $body, $headers);
     }
 
     private function buildBody(Mail $mail, ?string $boundary): string
@@ -113,6 +122,13 @@ class NativeMailer implements MailerInterface
         }
 
         return implode("\r\n", $lines);
+    }
+
+    private function encodeSubject(string $subject, string $charset): string
+    {
+        return preg_match('/[^\x20-\x7E]/', $subject)
+            ? sprintf('=?%s?B?%s?=', $this->stripCrlf($charset), base64_encode($subject))
+            : $this->stripCrlf($subject);
     }
 
     private function stripCrlf(string $value): string

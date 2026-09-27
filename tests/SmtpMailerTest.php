@@ -614,4 +614,93 @@ final class SmtpMailerTest extends TestCase
 
         $mailer->send($mail);
     }
+
+    public function testCustomHeaderOverridesContentTypeAndCte(): void
+    {
+        $transport = new FakeSmtpTransport();
+        $transport->responses = self::happyPathResponses();
+
+        $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withBody('Body')
+            ->withHeaders([
+                'X-Mailer' => 'CUSTOM',
+                'Content-Type' => 'text/x-custom',
+                'Content-Transfer-Encoding' => 'quoted-printable',
+            ]);
+
+        $mailer->send($mail);
+
+        $payload = $transport->payload();
+        self::assertStringContainsString('Content-Type: text/x-custom', $payload);
+        self::assertStringContainsString('Content-Transfer-Encoding: quoted-printable', $payload);
+        self::assertStringNotContainsString('Content-Type: text/plain', $payload);
+        self::assertSame(1, substr_count($payload, 'Content-Type:'));
+    }
+
+    public function testContinuationLineWithWrongCodeThrows(): void
+    {
+        // A multi-line response whose continuation line carries a different
+        // status code must not be accepted as success.
+        $transport = new FakeSmtpTransport();
+        $transport->responses = [
+            "220 ready\r\n",
+            "250-smtp.example.com\r\n",
+            "550 bad\r\n",
+        ];
+
+        $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withBody('Body');
+
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('expected 250, got 550');
+
+        $mailer->send($mail);
+    }
+
+    public function testPlaintextAuthIsSentWhenEncryptionIsEmpty(): void
+    {
+        // Documents the (unencrypted) behaviour when the caller explicitly
+        // opts out of encryption while still supplying credentials.
+        $transport = new FakeSmtpTransport();
+        $transport->responses = [
+            '220 ready',
+            '250 ok',
+            '334 VXNlcm5hbWU6',
+            '334 UGFzc3dvcmQ6',
+            '235 ok',
+            '250 ok',
+            '250 ok',
+            '354 ok',
+            '250 ok',
+            '221 ok',
+        ];
+
+        $mailer = new SmtpMailer(
+            'smtp.example.com',
+            25,
+            username: 'user',
+            password: 'pass',
+            transport: $transport
+        );
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withBody('Body');
+
+        $mailer->send($mail);
+
+        $cmds = $transport->commands();
+        self::assertContains('AUTH LOGIN', $cmds);
+        self::assertContains(base64_encode('user'), $cmds);
+        self::assertContains(base64_encode('pass'), $cmds);
+    }
 }

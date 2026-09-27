@@ -234,16 +234,7 @@ final class NativeMailerTest extends TestCase
 
     public function testSubjectIsStrippedOfCrlfBeforeMailCall(): void
     {
-        $mailer = new class extends NativeMailer {
-            public string $capturedSubject = '';
-
-            public function send(Mail $mail): void
-            {
-                // Replicate the subject sanitisation done in send() before mail()
-                $reflection = new \ReflectionMethod(parent::class, 'stripCrlf');
-                $this->capturedSubject = $reflection->invoke($this, $mail->subject);
-            }
-        };
+        $mailer = new CapturingNativeMailer();
 
         $mail = (new Mail())
             ->withFrom('from@example.com')
@@ -253,7 +244,38 @@ final class NativeMailerTest extends TestCase
 
         $mailer->send($mail);
 
-        self::assertSame('HelloBcc: evil@example.com', $mailer->capturedSubject);
+        self::assertStringNotContainsString("\r\nBcc: ", $mailer->subject);
+        self::assertStringNotContainsString("\nBcc: ", $mailer->subject);
+    }
+
+    public function testNonAsciiSubjectIsRfc2047Encoded(): void
+    {
+        $mailer = new CapturingNativeMailer();
+
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('会议通知')
+            ->withBody('Body');
+
+        $mailer->send($mail);
+
+        self::assertSame('=?utf-8?B?' . base64_encode('会议通知') . '?=', $mailer->subject);
+    }
+
+    public function testAsciiSubjectIsNotEncoded(): void
+    {
+        $mailer = new CapturingNativeMailer();
+
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Plain ASCII subject')
+            ->withBody('Body');
+
+        $mailer->send($mail);
+
+        self::assertSame('Plain ASCII subject', $mailer->subject);
     }
 
     public function testCustomHeadersOverrideBuiltInOnes(): void
@@ -272,24 +294,34 @@ final class NativeMailerTest extends TestCase
             ->withTo('to@example.com')
             ->withSubject('Test')
             ->withBody('Body')
-            ->withHeaders(['X-Mailer' => 'CustomMailer']);
+            ->withHeaders(['X-Mailer' => 'CustomMailer', 'Content-Type' => 'text/x-custom']);
 
         $mailer->send($mail);
 
         self::assertStringContainsString('X-Mailer: CustomMailer', $mailer->capturedHeaders);
         self::assertSame(1, substr_count($mailer->capturedHeaders, 'X-Mailer:'));
+        self::assertStringContainsString('Content-Type: text/x-custom', $mailer->capturedHeaders);
+        self::assertStringNotContainsString('Content-Type: text/plain', $mailer->capturedHeaders);
+    }
+
+    public function testCcOnlyMessageIsRejectedWithNoRecipient(): void
+    {
+        $mailer = new CapturingNativeMailer();
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withCc('cc@example.com')
+            ->withSubject('Test')
+            ->withBody('Body');
+
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('No recipient specified');
+
+        $mailer->send($mail);
     }
 
     public function testMissingAttachmentThrowsException(): void
     {
-        $mailer = new class extends NativeMailer {
-            public function send(Mail $mail): void
-            {
-                $boundary = $mail->hasAttachments() ? 'test-boundary' : null;
-                $reflection = new \ReflectionMethod(parent::class, 'buildBody');
-                $reflection->invoke($this, $mail, $boundary);
-            }
-        };
+        $mailer = new CapturingNativeMailer();
 
         $mail = (new Mail())
             ->withFrom('from@example.com')
@@ -302,5 +334,29 @@ final class NativeMailerTest extends TestCase
         $this->expectExceptionMessage('Attachment not found');
 
         $mailer->send($mail);
+    }
+
+    public function testAttachmentIsIncludedInDeliveredBody(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'mailatt') . '.txt';
+        file_put_contents($file, 'attachment-content');
+        try {
+            $mailer = new CapturingNativeMailer();
+
+            $mail = (new Mail())
+                ->withFrom('from@example.com')
+                ->withTo('to@example.com')
+                ->withSubject('Test')
+                ->withBody('Body')
+                ->withAttachment($file, 'doc.txt', 'text/plain');
+
+            $mailer->send($mail);
+
+            self::assertStringContainsString('Content-Type: multipart/mixed', $mailer->headers);
+            self::assertStringContainsString('Content-Disposition: attachment; filename="doc.txt"', $mailer->body);
+            self::assertStringContainsString(base64_encode('attachment-content'), $mailer->body);
+        } finally {
+            @unlink($file);
+        }
     }
 }

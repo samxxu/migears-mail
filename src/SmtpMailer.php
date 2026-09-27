@@ -110,15 +110,18 @@ class SmtpMailer implements MailerInterface
         if ($mail->replyTo !== '') {
             $headers['Reply-To'] = $mail->replyTo;
         }
-        foreach ($mail->headers as $name => $value) {
-            $headers[$name] = $value;
-        }
 
         if ($boundary) {
             $headers['Content-Type'] = 'multipart/mixed; boundary="' . $boundary . '"';
         } else {
             $headers['Content-Type'] = $mail->getContentType() . '; charset=' . $this->stripCrlf($mail->charset);
             $headers['Content-Transfer-Encoding'] = 'base64';
+        }
+
+        // Custom headers are applied last so they can override built-in
+        // ones of the same name — matching NativeMailer's behaviour.
+        foreach ($mail->headers as $name => $value) {
+            $headers[$name] = $value;
         }
 
         $lines = [];
@@ -222,6 +225,12 @@ class SmtpMailer implements MailerInterface
                 throw MailException::from('SMTP connection closed mid-response');
             }
             $response .= $line;
+            $code = substr(trim($line), 0, 3);
+            if ($code !== $expectedCode) {
+                throw MailException::from(
+                    "SMTP error: expected $expectedCode, got $code (response: " . trim($line) . ')'
+                );
+            }
             $sep = substr($line, 3, 1);
             if ($sep === ' ' || $sep === "\r" || $sep === "\n" || $sep === '') {
                 break;
