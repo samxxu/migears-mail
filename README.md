@@ -93,14 +93,16 @@ interface MailerInterface
 
 ### Built-in Implementations
 
-- **NativeMailer** - Uses PHP's native `mail()` function
+- **NativeMailer** - Uses PHP's native `mail()` function, supports attachments (multipart/mixed)
 - **SmtpMailer** - Implements SMTP protocol using `fsockopen`, supports TLS/SSL and LOGIN authentication
 
-Both drivers require a non-empty sender (`from`). If `SmtpMailer` is configured with `encryption: 'tls'` but the server does not advertise `STARTTLS`, it throws `MailException` rather than falling back to plaintext — credentials are never transmitted unencrypted. The encryption mode is case-insensitive and any value other than `''`/`tls`/`ssl` is rejected at construction.
+Both drivers require a non-empty sender (`from`). If `SmtpMailer` is configured with `encryption: 'tls'` but the server does not advertise `STARTTLS`, it throws `MailException` rather than falling back to plaintext — credentials are never transmitted unencrypted. The encryption mode is case-insensitive and any value other than `''`/`tls`/`ssl` is rejected at construction. Providing only a username or only a password also throws rather than silently skipping authentication.
 
-All user-supplied values that end up in message headers (display name, subject, custom header names/values, charset, attachment names and types) have CR/LF characters stripped at serialization time by the mailer driver, so no injected header line (e.g. `Bcc:`) can be smuggled in. Custom header names containing `:` are rejected. The `Mail` value object itself is wire-format agnostic and performs no CRLF filtering — header-safety is a driver responsibility.
+All user-supplied values that end up in message headers (display name, subject, custom header names/values, charset, attachment names and types) have CR/LF characters stripped at serialization time by the mailer driver, so no injected header line (e.g. `Bcc:`) can be smuggled in. Custom header names containing `:` are rejected. The `Mail` value object itself is wire-format agnostic and performs no CRLF filtering — header-safety is a driver responsibility. Custom headers override built-in ones of the same name in both drivers.
 
 The display name is additionally escaped (`\` and `"`) by `Mail::getFormattedFrom()` before being wrapped in quotes, so it cannot break out of `"..."` and inject extra addresses into the `From` header.
+
+The `Mail` constructor validates all email addresses (`from`, `to`, `cc`, `bcc`, `replyTo`) just like the `with*` methods, so `new Mail(to: [...])` is just as safe as `(new Mail())->withTo(...)`.
 
 For testing, `SmtpMailer` accepts an optional injected `MiGears\Mail\Transport\SmtpTransport` (see the `SocketSmtpTransport` default implementation).
 
@@ -214,14 +216,16 @@ interface MailerInterface
 
 ### 内置实现
 
-- **NativeMailer** - 使用 PHP 原生 `mail()` 函数
+- **NativeMailer** - 使用 PHP 原生 `mail()` 函数，支持附件（multipart/mixed）
 - **SmtpMailer** - 使用 `fsockopen` 实现 SMTP 协议，支持 TLS/SSL 和 LOGIN 认证
 
-两个驱动都要求非空发件人（`from`）。若 `SmtpMailer` 配置了 `encryption: 'tls'` 但服务端未宣告 `STARTTLS`，会抛出 `MailException` 而非回退为明文——凭据绝不会以未加密方式传输。加密模式大小写不敏感，构造时仅接受 `''`/`tls`/`ssl`，其他值直接抛异常。
+两个驱动都要求非空发件人（`from`）。若 `SmtpMailer` 配置了 `encryption: 'tls'` 但服务端未宣告 `STARTTLS`，会抛出 `MailException` 而非回退为明文——凭据绝不会以未加密方式传输。加密模式大小写不敏感，构造时仅接受 `''`/`tls`/`ssl`，其他值直接抛异常。只提供用户名或只提供密码也会抛异常，而不会静默跳过认证。
 
-所有会进入邮件头的用户输入（显示名、主题、自定义头名与值、charset、附件名与类型）在序列化时由 Mailer 驱动剥离 CR/LF 字符，因此无法注入额外的头部行（如 `Bcc:`）。含冒号的自定义头名会被拒绝。`Mail` 值对象本身与传输格式无关，不做 CRLF 过滤——头部安全是驱动层的职责。
+所有会进入邮件头的用户输入（显示名、主题、自定义头名与值、charset、附件名与类型）在序列化时由 Mailer 驱动剥离 CR/LF 字符，因此无法注入额外的头部行（如 `Bcc:`）。含冒号的自定义头名会被拒绝。`Mail` 值对象本身与传输格式无关，不做 CRLF 过滤——头部安全是驱动层的职责。两个驱动中同名自定义头均会覆盖内置头。
 
 显示名的 `\` 与 `"` 转义由 `Mail::getFormattedFrom()` 完成（属格式化职责），因此无法突破 `"..."` 向 `From` 头注入额外地址。
+
+`Mail` 构造器与 `with*` 方法一样会校验全部邮箱地址（`from`、`to`、`cc`、`bcc`、`replyTo`），因此 `new Mail(to: [...])` 与 `(new Mail())->withTo(...)` 同样安全。
 
 为便于测试，`SmtpMailer` 接受可选注入的 `MiGears\Mail\Transport\SmtpTransport`（默认实现为 `SocketSmtpTransport`）。
 

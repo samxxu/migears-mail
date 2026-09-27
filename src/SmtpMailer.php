@@ -66,7 +66,9 @@ class SmtpMailer implements MailerInterface
     {
         $response = $this->cmd($transport, 'EHLO ' . $this->localhost, '250');
         if ($this->encryption === 'tls') {
-            if (!str_contains($response, '250-STARTTLS')) {
+            $hasStarttls = stripos($response, '250-STARTTLS') !== false
+                || preg_match('/^250 STARTTLS\s*$/mi', $response) === 1;
+            if (!$hasStarttls) {
                 throw MailException::from('Server does not support STARTTLS but TLS was requested');
             }
             $this->cmd($transport, 'STARTTLS', '220');
@@ -77,8 +79,11 @@ class SmtpMailer implements MailerInterface
 
     private function authenticate(SmtpTransport $transport): void
     {
-        if ($this->username === '' || $this->password === '') {
+        if ($this->username === '' && $this->password === '') {
             return;
+        }
+        if ($this->username === '' || $this->password === '') {
+            throw MailException::from('SMTP username and password must both be provided');
         }
         $this->cmd($transport, 'AUTH LOGIN', '334');
         $this->cmd($transport, base64_encode($this->username), '334');
@@ -90,13 +95,15 @@ class SmtpMailer implements MailerInterface
         $boundary = $mail->hasAttachments() ? '----=_Part_' . md5(uniqid()) : null;
         $headers = [
             'From' => $mail->getFormattedFrom(),
-            'To' => implode(', ', $mail->to),
             'Subject' => $this->encodeSubject($mail->subject, $mail->charset),
             'MIME-Version' => '1.0',
             'Date' => date('r'),
             'Message-ID' => '<' . md5(uniqid()) . '@' . $this->localhost . '>',
             'X-Mailer' => 'miGears-Mail',
         ];
+        if ($mail->to !== []) {
+            $headers['To'] = implode(', ', $mail->to);
+        }
         if ($mail->cc !== []) {
             $headers['Cc'] = implode(', ', $mail->cc);
         }
@@ -188,22 +195,39 @@ class SmtpMailer implements MailerInterface
     private function expect(SmtpTransport $transport, string $expectedCode): string
     {
         $response = '';
-        $line = false;
-        while (($line = $transport->readLine()) !== false) {
+        $line = $transport->readLine();
+        if ($line === false) {
+            throw MailException::from('SMTP connection closed unexpectedly');
+        }
+        $response .= $line;
+        $code = substr(trim($line), 0, 3);
+        if ($code !== $expectedCode) {
+            throw MailException::from(
+                "SMTP error: expected $expectedCode, got $code (response: " . trim($line) . ')'
+            );
+        }
+
+        // RFC 5321: continuation lines start with "CODE-"; the final line
+        // starts with "CODE " (code + space). A bare "CODE\r\n" with no
+        // text and no trailing space is also treated as final so we don't
+        // swallow the next response and desynchronise.
+        $sep = substr($line, 3, 1);
+        if ($sep === ' ' || $sep === "\r" || $sep === "\n" || $sep === '') {
+            return $response;
+        }
+
+        while (true) {
+            $line = $transport->readLine();
+            if ($line === false) {
+                throw MailException::from('SMTP connection closed mid-response');
+            }
             $response .= $line;
-            if (substr($line, 3, 1) === ' ') {
+            $sep = substr($line, 3, 1);
+            if ($sep === ' ' || $sep === "\r" || $sep === "\n" || $sep === '') {
                 break;
             }
         }
-        if ($line === false && $response === '') {
-            throw MailException::from('SMTP connection closed unexpectedly');
-        }
-        $code = substr(trim($response), 0, 3);
-        if ($code !== $expectedCode) {
-            throw MailException::from(
-                "SMTP error: expected $expectedCode, got $code - " . trim($response)
-            );
-        }
+
         return $response;
     }
 }

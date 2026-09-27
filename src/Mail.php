@@ -36,6 +36,21 @@ class Mail
         public readonly array $headers = [],
         public readonly array $attachments = [],
     ) {
+        if ($from !== '') {
+            self::validateEmail($from, 'from');
+        }
+        foreach ($to as $email) {
+            self::validateEmail($email, 'to');
+        }
+        foreach ($cc as $email) {
+            self::validateEmail($email, 'cc');
+        }
+        foreach ($bcc as $email) {
+            self::validateEmail($email, 'bcc');
+        }
+        if ($replyTo !== '') {
+            self::validateEmail($replyTo, 'reply-to');
+        }
     }
 
     public function withFrom(string $email, string $name = ''): self
@@ -128,6 +143,13 @@ class Mail
         return sprintf('"%s" <%s>', $name, $this->from);
     }
 
+    /**
+     * @param list<string>|null $to
+     * @param list<string>|null $cc
+     * @param list<string>|null $bcc
+     * @param array<string, string>|null $headers
+     * @param list<Attachment>|null $attachments
+     */
     private function copy(
         ?string $from = null,
         ?string $fromName = null,

@@ -57,4 +57,10 @@ final class FakeSmtpTransport implements SmtpTransport
     {
         return implode('', $this->written);
     }
+
+    /** @return list<string> Commands that were written, with trailing \r\n stripped. */
+    public function commands(): array
+    {
+        return array_map(fn(string $line): string => rtrim($line, "\r\n"), $this->written);
+    }
 }

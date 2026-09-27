@@ -263,4 +263,50 @@ final class MailTest extends TestCase
 
         self::assertSame(['a@example.com', 'b@example.com', 'c+tag@example.com'], $mail->to);
     }
+
+    public function testConstructorValidatesFromAddress(): void
+    {
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('Invalid from address');
+
+        new Mail(from: 'not-an-email');
+    }
+
+    public function testConstructorValidatesToAddresses(): void
+    {
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('Invalid to address');
+
+        new Mail(to: ['bad@']);
+    }
+
+    public function testConstructorValidatesCcAddresses(): void
+    {
+        $this->expectException(MailException::class);
+
+        new Mail(cc: ['bad']);
+    }
+
+    public function testConstructorValidatesBccAddresses(): void
+    {
+        $this->expectException(MailException::class);
+
+        new Mail(bcc: ['bad']);
+    }
+
+    public function testConstructorValidatesReplyToAddress(): void
+    {
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('Invalid reply-to address');
+
+        new Mail(replyTo: '@example.com');
+    }
+
+    public function testConstructorWithEmptyAddressesIsValid(): void
+    {
+        $mail = new Mail();
+        self::assertSame('', $mail->from);
+        self::assertSame([], $mail->to);
+        self::assertSame('', $mail->replyTo);
+    }
 }

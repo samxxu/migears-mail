@@ -200,4 +200,107 @@ final class NativeMailerTest extends TestCase
         self::assertStringNotContainsString("\r\nBcc: ", $mailer->capturedHeaders);
         self::assertSame(1, substr_count($mailer->capturedHeaders, 'From: '));
     }
+
+    public function testBuildHeadersWithAttachmentsSetsMultipartMixed(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'mailatt');
+        file_put_contents($file, 'hello');
+        try {
+            $mailer = new class extends NativeMailer {
+                public string $capturedHeaders = '';
+
+                public function send(Mail $mail): void
+                {
+                    $boundary = $mail->hasAttachments() ? 'test-boundary' : null;
+                    $this->capturedHeaders = $this->buildHeaders($mail, $boundary);
+                }
+            };
+
+            $mail = (new Mail())
+                ->withFrom('from@example.com')
+                ->withTo('to@example.com')
+                ->withSubject('Test')
+                ->withBody('Body')
+                ->withAttachment($file, 'doc.txt', 'text/plain');
+
+            $mailer->send($mail);
+
+            self::assertStringContainsString('Content-Type: multipart/mixed; boundary="test-boundary"', $mailer->capturedHeaders);
+            self::assertStringNotContainsString('Content-Transfer-Encoding: base64', $mailer->capturedHeaders);
+        } finally {
+            @unlink($file);
+        }
+    }
+
+    public function testSubjectIsStrippedOfCrlfBeforeMailCall(): void
+    {
+        $mailer = new class extends NativeMailer {
+            public string $capturedSubject = '';
+
+            public function send(Mail $mail): void
+            {
+                // Replicate the subject sanitisation done in send() before mail()
+                $reflection = new \ReflectionMethod(parent::class, 'stripCrlf');
+                $this->capturedSubject = $reflection->invoke($this, $mail->subject);
+            }
+        };
+
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject("Hello\r\nBcc: evil@example.com")
+            ->withBody('Body');
+
+        $mailer->send($mail);
+
+        self::assertSame('HelloBcc: evil@example.com', $mailer->capturedSubject);
+    }
+
+    public function testCustomHeadersOverrideBuiltInOnes(): void
+    {
+        $mailer = new class extends NativeMailer {
+            public string $capturedHeaders = '';
+
+            public function send(Mail $mail): void
+            {
+                $this->capturedHeaders = $this->buildHeaders($mail);
+            }
+        };
+
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withBody('Body')
+            ->withHeaders(['X-Mailer' => 'CustomMailer']);
+
+        $mailer->send($mail);
+
+        self::assertStringContainsString('X-Mailer: CustomMailer', $mailer->capturedHeaders);
+        self::assertSame(1, substr_count($mailer->capturedHeaders, 'X-Mailer:'));
+    }
+
+    public function testMissingAttachmentThrowsException(): void
+    {
+        $mailer = new class extends NativeMailer {
+            public function send(Mail $mail): void
+            {
+                $boundary = $mail->hasAttachments() ? 'test-boundary' : null;
+                $reflection = new \ReflectionMethod(parent::class, 'buildBody');
+                $reflection->invoke($this, $mail, $boundary);
+            }
+        };
+
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withBody('Body')
+            ->withAttachment('/no/such/file.txt');
+
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('Attachment not found');
+
+        $mailer->send($mail);
+    }
 }

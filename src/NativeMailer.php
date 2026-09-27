@@ -21,9 +21,10 @@ class NativeMailer implements MailerInterface
         }
 
         $to = implode(', ', $mail->to);
-        $subject = $mail->subject;
-        $body = $mail->body;
-        $headers = $this->buildHeaders($mail);
+        $subject = $this->stripCrlf($mail->subject);
+        $boundary = $mail->hasAttachments() ? '----=_Part_' . md5(uniqid()) : null;
+        $body = $this->buildBody($mail, $boundary);
+        $headers = $this->buildHeaders($mail, $boundary);
 
         $result = @mail($to, $subject, $body, $headers);
 
@@ -32,9 +33,49 @@ class NativeMailer implements MailerInterface
         }
     }
 
-    protected function buildHeaders(Mail $mail): string
+    private function buildBody(Mail $mail, ?string $boundary): string
     {
-        $headers = $mail->headers;
+        if ($boundary === null) {
+            return chunk_split(base64_encode($mail->body));
+        }
+
+        $body = '--' . $boundary . "\r\n";
+        $body .= 'Content-Type: ' . $mail->getContentType() . '; charset=' . $this->stripCrlf($mail->charset) . "\r\n";
+        $body .= "Content-Transfer-Encoding: base64\r\n\r\n";
+        $body .= chunk_split(base64_encode($mail->body)) . "\r\n";
+        foreach ($mail->attachments as $att) {
+            $body .= $this->buildAttachmentPart($att, $boundary);
+        }
+        $body .= '--' . $boundary . '--';
+
+        return $body;
+    }
+
+    /** @param array{path: string, name: ?string, type: ?string} $att */
+    private function buildAttachmentPart(array $att, string $boundary): string
+    {
+        $filePath = $att['path'];
+        $fileName = $this->stripCrlf($att['name'] ?? basename($filePath));
+        $mimeType = $this->stripCrlf($att['type'] ?? 'application/octet-stream');
+
+        if (!is_file($filePath)) {
+            throw MailException::from("Attachment not found: $filePath");
+        }
+        $content = file_get_contents($filePath);
+        if ($content === false) {
+            throw MailException::from("Cannot read attachment: $filePath");
+        }
+
+        return '--' . $boundary . "\r\n"
+            . 'Content-Type: ' . $mimeType . '; name="' . $fileName . '"' . "\r\n"
+            . "Content-Transfer-Encoding: base64\r\n"
+            . 'Content-Disposition: attachment; filename="' . $fileName . '"' . "\r\n\r\n"
+            . chunk_split(base64_encode($content)) . "\r\n";
+    }
+
+    protected function buildHeaders(Mail $mail, ?string $boundary = null): string
+    {
+        $headers = [];
 
         if ($mail->from !== '') {
             $headers['From'] = $mail->getFormattedFrom();
@@ -53,8 +94,18 @@ class NativeMailer implements MailerInterface
         }
 
         $headers['MIME-Version'] = '1.0';
-        $headers['Content-Type'] = sprintf('%s; charset=%s', $mail->getContentType(), $this->stripCrlf($mail->charset));
+        if ($boundary !== null) {
+            $headers['Content-Type'] = 'multipart/mixed; boundary="' . $boundary . '"';
+        } else {
+            $headers['Content-Type'] = sprintf('%s; charset=%s', $mail->getContentType(), $this->stripCrlf($mail->charset));
+            $headers['Content-Transfer-Encoding'] = 'base64';
+        }
         $headers['X-Mailer'] = 'miGears-Mail';
+
+        // Custom headers are applied last so they can override built-in ones
+        foreach ($mail->headers as $name => $value) {
+            $headers[$name] = $value;
+        }
 
         $lines = [];
         foreach ($headers as $name => $value) {

@@ -439,4 +439,179 @@ final class SmtpMailerTest extends TestCase
             @unlink($file);
         }
     }
+
+    public function testExpectHandlesBareStatusCodeLine(): void
+    {
+        // A bare "250\r\n" (no space, no text) must be treated as final,
+        // not as a continuation — otherwise the next response gets eaten
+        // and the session desynchronises.
+        $transport = new FakeSmtpTransport();
+        $transport->responses = [
+            "220 ready\r\n",
+            "250\r\n",          // EHLO response: bare status, no text
+            "250 ok\r\n",       // MAIL FROM
+            "250 ok\r\n",       // RCPT TO
+            "354 ok\r\n",
+            "250 ok\r\n",
+            "221 ok\r\n",
+        ];
+
+        $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withBody('Body');
+
+        $mailer->send($mail);
+
+        // If the session stayed in sync, QUIT was the last command sent
+        $cmds = $transport->commands();
+        self::assertSame('QUIT', end($cmds));
+    }
+
+    public function testExpectTruncatedMultilineResponseThrows(): void
+    {
+        // When a multi-line EHLO response is cut off mid-stream (no final
+        // line with trailing space), we must throw instead of silently
+        // treating the partial response as success.
+        $transport = new FakeSmtpTransport();
+        $transport->responses = [
+            "220 ready\r\n",
+            "250-smtp.example.com\r\n",   // EHLO line 1 (continuation)
+            "250-AUTH LOGIN\r\n",         // EHLO line 2 (continuation)
+            // ...connection drops before the final "250 STARTTLS" line
+            false,
+        ];
+
+        $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withBody('Body');
+
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('closed mid-response');
+
+        $mailer->send($mail);
+    }
+
+    public function testStarttlsWorksWhenLastEhloLine(): void
+    {
+        // STARTTLS advertised on the final EHLO line (250 STARTTLS, no dash)
+        $transport = new FakeSmtpTransport();
+        $transport->responses = [
+            "220 ready\r\n",
+            "250-smtp.example.com\r\n",
+            "250-AUTH LOGIN\r\n",
+            "250 STARTTLS\r\n",
+            "220 Ready to start TLS\r\n",
+            "250-smtp.example.com\r\n",
+            "250 AUTH LOGIN\r\n",
+            "250 ok\r\n",  // MAIL FROM
+            "250 ok\r\n",  // RCPT TO
+            "354 ok\r\n",
+            "250 ok\r\n",
+            "221 ok\r\n",
+        ];
+
+        $mailer = new SmtpMailer('smtp.example.com', 587, encryption: 'tls', transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withBody('Body');
+
+        $mailer->send($mail);
+
+        $cmds = $transport->commands();
+        self::assertContains('STARTTLS', $cmds);
+    }
+
+    public function testStarttlsIsCaseInsensitive(): void
+    {
+        $transport = new FakeSmtpTransport();
+        $transport->responses = [
+            "220 ready\r\n",
+            "250-smtp.example.com\r\n",
+            "250 starttls\r\n",        // lower case, last line form
+            "220 Ready to start TLS\r\n",
+            "250-smtp.example.com\r\n",
+            "250 AUTH LOGIN\r\n",
+            "250 ok\r\n",
+            "250 ok\r\n",
+            "354 ok\r\n",
+            "250 ok\r\n",
+            "221 ok\r\n",
+        ];
+
+        $mailer = new SmtpMailer('smtp.example.com', 587, encryption: 'tls', transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withBody('Body');
+
+        $mailer->send($mail);
+
+        $cmds = $transport->commands();
+        self::assertContains('STARTTLS', $cmds);
+    }
+
+    public function testCcOnlyMessageOmitsToHeader(): void
+    {
+        $transport = new FakeSmtpTransport();
+        $transport->responses = self::happyPathResponses();
+
+        $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withCc('cc@example.com')
+            ->withSubject('Test')
+            ->withBody('Body');
+
+        $mailer->send($mail);
+
+        self::assertStringNotContainsString("\r\nTo: \r\n", $transport->payload());
+        self::assertStringNotContainsString("\nTo: \r\n", $transport->payload());
+        // But Cc header is present
+        self::assertStringContainsString('Cc: cc@example.com', $transport->payload());
+    }
+
+    public function testOnlyUsernameThrows(): void
+    {
+        $transport = new FakeSmtpTransport();
+        $transport->responses = ['220 ready', '250 ok', '250 ok'];
+
+        $mailer = new SmtpMailer('smtp.example.com', 25, username: 'user', transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withBody('Body');
+
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('username and password must both be provided');
+
+        $mailer->send($mail);
+    }
+
+    public function testOnlyPasswordThrows(): void
+    {
+        $transport = new FakeSmtpTransport();
+        $transport->responses = ['220 ready', '250 ok', '250 ok'];
+
+        $mailer = new SmtpMailer('smtp.example.com', 25, password: 'pass', transport: $transport);
+        $mail = (new Mail())
+            ->withFrom('from@example.com')
+            ->withTo('to@example.com')
+            ->withSubject('Test')
+            ->withBody('Body');
+
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('username and password must both be provided');
+
+        $mailer->send($mail);
+    }
 }
