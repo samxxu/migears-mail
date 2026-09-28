@@ -1,29 +1,28 @@
-# migears-mail — Known Issues / 已知问题
+# migears-mail — Known Issues
 
 > Summary of this module's issues. The items themselves are in [`issues/`](issues/README.md), one file
 > per item: a front-matter header and a thread. This file is generated from them and can be rewritten at
 > any time; edit an item, never this file.
 >
-> 本模块问题的概览。条目本体在 [`issues/`](issues/README.md)，一条目一文件：前置字段加讨论串。
-> 本文件由条目生成，随时可以整段重写；请改条目，不要改本文件。
->
-> From the miGears Full-Module Code Review Report (4th round, 2026-09-27).
+> From the miGears Full-Module Code Review Report (5th round, 2026-09-28).
 
 | | |
 |---|---|
-| Status / 状态 | **P1 open / P1 待修** |
-| Size / 体量 | src 652 lines (513 net) · 88 tests · 7 src files |
+| Status | **Best state** |
+| Size | src 528 lines (net) · 95 tests · 7 src files |
 
-Legend / 图例 — **P0** functional or security · **P1** documentation that fails when copied · **P2** robustness · **P3** metadata and docs
-级别说明 — **P0** 功能性或安全级 · **P1** 文档照抄即错 · **P2** 健壮性 · **P3** 元数据与文档
+Legend — **P0** functional or security · **P1** documentation that fails when copied · **P2** robustness · **P3** metadata and docs
 
-## At a glance / 状态一览
+## At a glance
 
 | | |
 |---|---|
-| Items / 条目 | P0 0 · P1 1 · P2 0 · P3 5 · other 1 |
-| Answered / 已回复 | 7 of 7 |
-| Waiting / 等待回复 | _nothing / 无_ |
+| Unsettled | P0 0 · P1 1 · P2 0 · P3 5 · other 1 |
+| Settled | 0 of 7 |
+| Waiting on the owner | _nothing_ |
+| Waiting on the reviewer | `P1-1`, `P3-1`, `P3-2`, `P3-3`, `P3-4`, `P3-5`, `G2` |
+| Waiting on the coordinator | _nothing_ |
+| Deferred, owing nobody | _nothing_ |
 
 | id | level | status | title |
 |---|---|---|---|
@@ -35,25 +34,118 @@ Legend / 图例 — **P0** functional or security · **P1** documentation that f
 | [`P3-5`](issues/P3-5.md) | P3 | **fixed** | With `encryption: ''` and credentials present, `AUTH LOGIN` still goes … |
 | [`G2`](issues/G2.md) | - | **fixed** | Strict flags: `phpunit.xml.dist` currently sets `failOnWarning`, … |
 
-## Verdict / 结论
+## Unclosed
 
-The driver asymmetry is largely cured and the SMTP session logic is now properly defensive. One README promise is still false for one driver, and the remaining items are all driver-to-driver inconsistencies rather than crashes.
+What is left to do here: every item whose `status` is not `verified` or `closed`,
+highest severity first. `waiting on` is the party who acts next, read from that status.
 
-两驱动的不对称基本治好，SMTP 会话逻辑的防御也补齐了。仍有一条 README 承诺对其中一个驱动不成立，其余问题都属于「两驱动行为不一致」而非直接出错。
+| | |
+|---|---|
+| Unclosed | **7** of 7 |
+| By status | `fixed` 7 |
+| Waiting on | reviewer 7 |
 
-## Fixed since the last round / 本轮已修复确认
+| level | item | status | waiting on | title |
+|---|---|---|---|---|
+| **P1** | [`P1-1`](issues/P1-1.md) | `fixed` | reviewer | The README promises custom headers override same-named built-in ones … |
+| **P3** | [`P3-1`](issues/P3-1.md) | `fixed` | reviewer | A cc/bcc-only message is accepted by SmtpMailer but rejected by … |
+| **P3** | [`P3-2`](issues/P3-2.md) | `fixed` | reviewer | NativeMailer writes a `Bcc:` header while SmtpMailer deliberately omits … |
+| **P3** | [`P3-3`](issues/P3-3.md) | `fixed` | reviewer | Non-ASCII subjects diverge: SmtpMailer applies RFC 2047 base64 … |
+| **P3** | [`P3-4`](issues/P3-4.md) | `fixed` | reviewer | `expect()` validates only the first line's status code; a continuation … |
+| **P3** | [`P3-5`](issues/P3-5.md) | `fixed` | reviewer | With `encryption: ''` and credentials present, `AUTH LOGIN` still goes … |
+| **-** | [`G2`](issues/G2.md) | `fixed` | reviewer | Strict flags: `phpunit.xml.dist` currently sets `failOnWarning`, … |
 
-上一轮的 NativeMailer 两大硬伤确已修复：subject 现在过 stripCrlf 并有测试，附件走 multipart/mixed 且缺文件会抛异常。SmtpMailer 侧也全部补齐：缺一凭据即抛、STARTTLS 大小写与末行形态、cc-only 不再输出空 To、expect() 支撑裸状态码与截断多行、公共构造器补上地址校验。 
+## Verdict
 
-## Test gaps / 测试盲区
+A well-engineered mailer with consistent behavior between SmtpMailer and NativeMailer on all documented divergence points. Only minor defense-in-depth gaps remain.
 
-No test asserts what actually reaches `mail()` (the existing CRLF test calls the private helper via reflection); no cross-driver assertion for custom-vs-builtin header precedence (which is how the P1 escaped); no NativeMailer cc-only case; no plaintext-AUTH case; no non-ASCII subject case for NativeMailer.
+## Fixed since the last round
 
-无「实际传给 mail() 的实参」断言（现有 CRLF 用例只是反射调用私有方法）；无「自定义头 vs 内置头优先级」的两驱动对拍断言（P1 由此逃逸）；无 NativeMailer 仅 cc/bcc 用例；无明文 AUTH 用例；无 NativeMailer 非 ASCII 主题用例。
+All six prior items confirmed fixed: P1-1 custom headers now override built-in in both drivers; P3-1 through P3-5 driver differences documented, RFC 2047 subject encoding added, expect() line-code validation added; G2 strict flags complete.
 
-## Verification protocol / 验证方式
+## Test gaps
+
+No integration test against a real SMTP server (all tests use transport mock); no test for attachment with non-ASCII filename encoding; no test for very long subject line folding.
+
+## Verification protocol
 
 - `./vendor/bin/phpunit` · `composer analyse` · `composer validate`
 - Warning/notice/deprecation/risky flags in `phpunit.xml.dist`: all four on
 - A PHP warning counts as a test failure only where those flags are on; otherwise run `./vendor/bin/phpunit --fail-on-warning` explicitly.
+
+
+---
+
+# migears-mail — 已知问题
+
+> 本模块问题的概览。条目本体在 [`issues/`](issues/README.md)，一条目一文件：前置字段加讨论串。
+> 本文件由条目生成，随时可以整段重写；请改条目，不要改本文件。
+>
+> 出自 miGears 全模块代码评审报告（5th round，2026-09-28）。
+
+| | |
+|---|---|
+| 状态 | **状态最好** |
+| 体量 | src 528 行（净）· 95 个用例 · 7 个源文件 |
+
+级别说明 — **P0** 功能性或安全级 · **P1** 文档照抄即错 · **P2** 健壮性 · **P3** 元数据与文档
+
+## 状态一览
+
+| | |
+|---|---|
+| 未了结 | P0 0 · P1 1 · P2 0 · P3 5 · 其他 1 |
+| 已了结 | 0 / 7 |
+| 等负责人 | _无_ |
+| 等评审方 | `P1-1`, `P3-1`, `P3-2`, `P3-3`, `P3-4`, `P3-5`, `G2` |
+| 等协调人 | _无_ |
+| 已暂缓，不欠谁 | _无_ |
+
+| id | 级别 | 状态 | 标题 |
+|---|---|---|---|
+| [`P1-1`](issues/P1-1.md) | P1 | **fixed** | README 承诺「两个驱动里自定义头都覆盖同名内置头」。实测 … |
+| [`P3-1`](issues/P3-1.md) | P3 | **fixed** | 仅 cc/bcc 的邮件 SmtpMailer 接受、NativeMailer 抛「No recipient specified」——同一个 … |
+| [`P3-2`](issues/P3-2.md) | P3 | **fixed** | NativeMailer 会写出 Bcc: 头，而 SmtpMailer 刻意不写，因此 Bcc 是否泄露取决于本地 MTA 是否剥离该头。 |
+| [`P3-3`](issues/P3-3.md) | P3 | **fixed** | 非 ASCII 主题两驱动不同：SmtpMailer 做 RFC 2047 base64 编码，NativeMailer 把原始字符串交给 … |
+| [`P3-4`](issues/P3-4.md) | P3 | **fixed** | expect() 只校验首行状态码；像 250-x\r\n550 bad\r\n 这样的续行混用会在 550 行结束循环并把整段当成功。 |
+| [`P3-5`](issues/P3-5.md) | P3 | **fixed** | encryption 为空串且提供凭据时仍以明文发送 AUTH LOGIN，而 README 称凭据「绝不会以未加密方式传输」。 |
+| [`G2`](issues/G2.md) | - | **fixed** | 严格开关：`phpunit.xml.dist` 目前已开启 … |
+
+## 未关闭
+
+本模块还剩什么要做：所有 `status` 不是 `verified` 或 `closed` 的条目，按严重度从高到低。
+`waiting on` 是下一步该动手的一方，由其状态读出。
+
+| | |
+|---|---|
+| 未关闭 | **7** / 7 |
+| 按状态 | `fixed` 7 |
+| 等在谁 | 评审方 7 |
+
+| 级别 | 条目 | 状态 | 等在谁 | 标题 |
+|---|---|---|---|---|
+| **P1** | [`P1-1`](issues/P1-1.md) | `fixed` | 评审方 | README 承诺「两个驱动里自定义头都覆盖同名内置头」。实测 … |
+| **P3** | [`P3-1`](issues/P3-1.md) | `fixed` | 评审方 | 仅 cc/bcc 的邮件 SmtpMailer 接受、NativeMailer 抛「No recipient specified」——同一个 … |
+| **P3** | [`P3-2`](issues/P3-2.md) | `fixed` | 评审方 | NativeMailer 会写出 Bcc: 头，而 SmtpMailer 刻意不写，因此 Bcc 是否泄露取决于本地 MTA 是否剥离该头。 |
+| **P3** | [`P3-3`](issues/P3-3.md) | `fixed` | 评审方 | 非 ASCII 主题两驱动不同：SmtpMailer 做 RFC 2047 base64 编码，NativeMailer 把原始字符串交给 … |
+| **P3** | [`P3-4`](issues/P3-4.md) | `fixed` | 评审方 | expect() 只校验首行状态码；像 250-x\r\n550 bad\r\n 这样的续行混用会在 550 行结束循环并把整段当成功。 |
+| **P3** | [`P3-5`](issues/P3-5.md) | `fixed` | 评审方 | encryption 为空串且提供凭据时仍以明文发送 AUTH LOGIN，而 README 称凭据「绝不会以未加密方式传输」。 |
+| **-** | [`G2`](issues/G2.md) | `fixed` | 评审方 | 严格开关：`phpunit.xml.dist` 目前已开启 … |
+
+## 结论
+
+一个设计精良的邮件发送器，SmtpMailer 与 NativeMailer 在所有文档记录的差异点上行为一致。仅剩少量纵深防御层面的缺口。
+
+## 本轮已修复确认
+
+All six prior items confirmed fixed: P1-1 custom headers now override built-in in both drivers; P3-1 through P3-5 driver differences documented, RFC 2047 subject encoding added, expect() line-code validation added; G2 strict flags complete.
+
+## 测试盲区
+
+无真实 SMTP 服务器集成测试（全部用 transport mock）；无附件文件名非 ASCII 编码测试；无长主题行折叠测试。
+
+## 验证方式
+
+- `./vendor/bin/phpunit` · `composer analyse` · `composer validate`
+- `phpunit.xml.dist` 中的 warning/notice/deprecation/risky 开关：四个全开
 - 只有在上述开关打开时 PHP 警告才会导致套件失败；否则请显式加 `--fail-on-warning`。
