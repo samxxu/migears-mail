@@ -17,22 +17,24 @@ Legend — **P0** functional or security · **P1** documentation that fails when
 
 | | |
 |---|---|
-| Unsettled | P0 0 · P1 1 · P2 0 · P3 5 · other 1 |
-| Settled | 0 of 7 |
-| Waiting on the owner | _nothing_ |
-| Waiting on the reviewer | `P1-1`, `P3-1`, `P3-2`, `P3-3`, `P3-4`, `P3-5`, `G2` |
+| Unsettled | P0 0 · P1 0 · P2 0 · P3 2 · other 0 |
+| Settled | 7 of 9 |
+| Waiting on the owner | `P3-6`, `P3-7` |
 | Waiting on the coordinator | _nothing_ |
+| Waiting on the reviewer | _nothing_ |
 | Deferred, owing nobody | _nothing_ |
 
 | id | level | status | title |
 |---|---|---|---|
-| [`P1-1`](issues/P1-1.md) | P1 | **fixed** | The README promises custom headers override same-named built-in ones … |
-| [`P3-1`](issues/P3-1.md) | P3 | **fixed** | A cc/bcc-only message is accepted by SmtpMailer but rejected by … |
-| [`P3-2`](issues/P3-2.md) | P3 | **fixed** | NativeMailer writes a `Bcc:` header while SmtpMailer deliberately omits … |
-| [`P3-3`](issues/P3-3.md) | P3 | **fixed** | Non-ASCII subjects diverge: SmtpMailer applies RFC 2047 base64 … |
-| [`P3-4`](issues/P3-4.md) | P3 | **fixed** | `expect()` validates only the first line's status code; a continuation … |
-| [`P3-5`](issues/P3-5.md) | P3 | **fixed** | With `encryption: ''` and credentials present, `AUTH LOGIN` still goes … |
-| [`G2`](issues/G2.md) | - | **fixed** | Strict flags: `phpunit.xml.dist` currently sets `failOnWarning`, … |
+| [`P1-1`](issues/P1-1.md) | P1 | **verified** | The README promises custom headers override same-named built-in ones … |
+| [`P3-1`](issues/P3-1.md) | P3 | **verified** | A cc/bcc-only message is accepted by SmtpMailer but rejected by … |
+| [`P3-2`](issues/P3-2.md) | P3 | **verified** | NativeMailer writes a `Bcc:` header while SmtpMailer deliberately omits … |
+| [`P3-3`](issues/P3-3.md) | P3 | **verified** | Non-ASCII subjects diverge: SmtpMailer applies RFC 2047 base64 … |
+| [`P3-4`](issues/P3-4.md) | P3 | **verified** | `expect()` validates only the first line's status code; a continuation … |
+| [`P3-5`](issues/P3-5.md) | P3 | **verified** | With `encryption: ''` and credentials present, `AUTH LOGIN` still goes … |
+| [`P3-6`](issues/P3-6.md) | P3 | **open** | Mail::getFormattedFrom() does not strip CRLF from fromName, though both … |
+| [`P3-7`](issues/P3-7.md) | P3 | **open** | SmtpMailer::send() does dot-escaping with str_replace('\r\n.', … |
+| [`G2`](issues/G2.md) | - | **verified** | Strict flags: `phpunit.xml.dist` currently sets `failOnWarning`, … |
 
 ## Unclosed
 
@@ -41,19 +43,14 @@ highest severity first. `waiting on` is the party who acts next, read from that 
 
 | | |
 |---|---|
-| Unclosed | **7** of 7 |
-| By status | `fixed` 7 |
-| Waiting on | reviewer 7 |
+| Unclosed | **2** of 9 |
+| By status | `open` 2 |
+| Waiting on | owner 2 |
 
 | level | item | status | waiting on | title |
 |---|---|---|---|---|
-| **P1** | [`P1-1`](issues/P1-1.md) | `fixed` | reviewer | The README promises custom headers override same-named built-in ones … |
-| **P3** | [`P3-1`](issues/P3-1.md) | `fixed` | reviewer | A cc/bcc-only message is accepted by SmtpMailer but rejected by … |
-| **P3** | [`P3-2`](issues/P3-2.md) | `fixed` | reviewer | NativeMailer writes a `Bcc:` header while SmtpMailer deliberately omits … |
-| **P3** | [`P3-3`](issues/P3-3.md) | `fixed` | reviewer | Non-ASCII subjects diverge: SmtpMailer applies RFC 2047 base64 … |
-| **P3** | [`P3-4`](issues/P3-4.md) | `fixed` | reviewer | `expect()` validates only the first line's status code; a continuation … |
-| **P3** | [`P3-5`](issues/P3-5.md) | `fixed` | reviewer | With `encryption: ''` and credentials present, `AUTH LOGIN` still goes … |
-| **-** | [`G2`](issues/G2.md) | `fixed` | reviewer | Strict flags: `phpunit.xml.dist` currently sets `failOnWarning`, … |
+| **P3** | [`P3-6`](issues/P3-6.md) | `open` | owner | Mail::getFormattedFrom() does not strip CRLF from fromName, though both … |
+| **P3** | [`P3-7`](issues/P3-7.md) | `open` | owner | SmtpMailer::send() does dot-escaping with str_replace('\r\n.', … |
 
 ## Verdict
 
@@ -94,22 +91,24 @@ No integration test against a real SMTP server (all tests use transport mock); n
 
 | | |
 |---|---|
-| 未了结 | P0 0 · P1 1 · P2 0 · P3 5 · 其他 1 |
-| 已了结 | 0 / 7 |
-| 等负责人 | _无_ |
-| 等评审方 | `P1-1`, `P3-1`, `P3-2`, `P3-3`, `P3-4`, `P3-5`, `G2` |
+| 未了结 | P0 0 · P1 0 · P2 0 · P3 2 · 其他 0 |
+| 已了结 | 7 / 9 |
+| 等模块主 | `P3-6`, `P3-7` |
 | 等协调人 | _无_ |
+| 等评审方 | _无_ |
 | 已暂缓，不欠谁 | _无_ |
 
 | id | 级别 | 状态 | 标题 |
 |---|---|---|---|
-| [`P1-1`](issues/P1-1.md) | P1 | **fixed** | README 承诺「两个驱动里自定义头都覆盖同名内置头」。实测 … |
-| [`P3-1`](issues/P3-1.md) | P3 | **fixed** | 仅 cc/bcc 的邮件 SmtpMailer 接受、NativeMailer 抛「No recipient specified」——同一个 … |
-| [`P3-2`](issues/P3-2.md) | P3 | **fixed** | NativeMailer 会写出 Bcc: 头，而 SmtpMailer 刻意不写，因此 Bcc 是否泄露取决于本地 MTA 是否剥离该头。 |
-| [`P3-3`](issues/P3-3.md) | P3 | **fixed** | 非 ASCII 主题两驱动不同：SmtpMailer 做 RFC 2047 base64 编码，NativeMailer 把原始字符串交给 … |
-| [`P3-4`](issues/P3-4.md) | P3 | **fixed** | expect() 只校验首行状态码；像 250-x\r\n550 bad\r\n 这样的续行混用会在 550 行结束循环并把整段当成功。 |
-| [`P3-5`](issues/P3-5.md) | P3 | **fixed** | encryption 为空串且提供凭据时仍以明文发送 AUTH LOGIN，而 README 称凭据「绝不会以未加密方式传输」。 |
-| [`G2`](issues/G2.md) | - | **fixed** | 严格开关：`phpunit.xml.dist` 目前已开启 … |
+| [`P1-1`](issues/P1-1.md) | P1 | **verified** | README 承诺「两个驱动里自定义头都覆盖同名内置头」。实测 … |
+| [`P3-1`](issues/P3-1.md) | P3 | **verified** | 仅 cc/bcc 的邮件 SmtpMailer 接受、NativeMailer 抛「No recipient specified」——同一个 … |
+| [`P3-2`](issues/P3-2.md) | P3 | **verified** | NativeMailer 会写出 Bcc: 头，而 SmtpMailer 刻意不写，因此 Bcc 是否泄露取决于本地 MTA 是否剥离该头。 |
+| [`P3-3`](issues/P3-3.md) | P3 | **verified** | 非 ASCII 主题两驱动不同：SmtpMailer 做 RFC 2047 base64 编码，NativeMailer 把原始字符串交给 … |
+| [`P3-4`](issues/P3-4.md) | P3 | **verified** | expect() 只校验首行状态码；像 250-x\r\n550 bad\r\n 这样的续行混用会在 550 行结束循环并把整段当成功。 |
+| [`P3-5`](issues/P3-5.md) | P3 | **verified** | encryption 为空串且提供凭据时仍以明文发送 AUTH LOGIN，而 README 称凭据「绝不会以未加密方式传输」。 |
+| [`P3-6`](issues/P3-6.md) | P3 | **open** | Mail::getFormattedFrom() 未对 fromName 做 CRLF 剥离，虽然两个 mailer 在最终头值上都有 … |
+| [`P3-7`](issues/P3-7.md) | P3 | **open** | SmtpMailer::send() 通过 str_replace 做点转义，若正文第一行以 "." … |
+| [`G2`](issues/G2.md) | - | **verified** | 严格开关：`phpunit.xml.dist` 目前已开启 … |
 
 ## 未关闭
 
@@ -118,19 +117,14 @@ No integration test against a real SMTP server (all tests use transport mock); n
 
 | | |
 |---|---|
-| 未关闭 | **7** / 7 |
-| 按状态 | `fixed` 7 |
-| 等在谁 | 评审方 7 |
+| 未关闭 | **2** / 9 |
+| 按状态 | `open` 2 |
+| 等在谁 | 模块主 2 |
 
 | 级别 | 条目 | 状态 | 等在谁 | 标题 |
 |---|---|---|---|---|
-| **P1** | [`P1-1`](issues/P1-1.md) | `fixed` | 评审方 | README 承诺「两个驱动里自定义头都覆盖同名内置头」。实测 … |
-| **P3** | [`P3-1`](issues/P3-1.md) | `fixed` | 评审方 | 仅 cc/bcc 的邮件 SmtpMailer 接受、NativeMailer 抛「No recipient specified」——同一个 … |
-| **P3** | [`P3-2`](issues/P3-2.md) | `fixed` | 评审方 | NativeMailer 会写出 Bcc: 头，而 SmtpMailer 刻意不写，因此 Bcc 是否泄露取决于本地 MTA 是否剥离该头。 |
-| **P3** | [`P3-3`](issues/P3-3.md) | `fixed` | 评审方 | 非 ASCII 主题两驱动不同：SmtpMailer 做 RFC 2047 base64 编码，NativeMailer 把原始字符串交给 … |
-| **P3** | [`P3-4`](issues/P3-4.md) | `fixed` | 评审方 | expect() 只校验首行状态码；像 250-x\r\n550 bad\r\n 这样的续行混用会在 550 行结束循环并把整段当成功。 |
-| **P3** | [`P3-5`](issues/P3-5.md) | `fixed` | 评审方 | encryption 为空串且提供凭据时仍以明文发送 AUTH LOGIN，而 README 称凭据「绝不会以未加密方式传输」。 |
-| **-** | [`G2`](issues/G2.md) | `fixed` | 评审方 | 严格开关：`phpunit.xml.dist` 目前已开启 … |
+| **P3** | [`P3-6`](issues/P3-6.md) | `open` | 模块主 | Mail::getFormattedFrom() 未对 fromName 做 CRLF 剥离，虽然两个 mailer 在最终头值上都有 … |
+| **P3** | [`P3-7`](issues/P3-7.md) | `open` | 模块主 | SmtpMailer::send() 通过 str_replace 做点转义，若正文第一行以 "." … |
 
 ## 结论
 
