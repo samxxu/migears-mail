@@ -26,7 +26,7 @@ A minimalist email sending library with zero required dependencies.
 
 - The immutable `Mail` value object and its fluent `with*` API — sender, to/cc/bcc, reply-to, subject, HTML or plain body, charset, custom headers and file-path attachments; addresses are validated with `filter_var` on set, which also blocks CRLF header injection.
 - The `MailerInterface::send(Mail): void` contract and its two built-in drivers: `NativeMailer` over PHP's `mail()` and `SmtpMailer` speaking SMTP over a socket/stream, plus the injectable `Transport\SmtpTransport` abstraction and its default `SocketSmtpTransport`.
-- Wire serialization owned by the drivers: headers and MIME parts, stripping CR/LF from user-supplied header values, RFC 2047 base64-encoding of non-ASCII subjects, the STARTTLS/SSL upgrade and `AUTH LOGIN`; failures surface as `MiGears\Mail\Exception\MailException`.
+- Wire serialization owned by the drivers: headers and MIME parts, stripping CR/LF from user-supplied header values, escaping quoted MIME parameters, RFC 2047 base64-encoding of non-ASCII subjects and display names, RFC 2231 encoding of non-ASCII attachment filenames, the STARTTLS/SSL upgrade and `AUTH LOGIN`; failures surface as `MiGears\Mail\Exception\MailException`.
 
 **Not in scope (by design)**
 
@@ -115,9 +115,9 @@ Both drivers require a non-empty sender (`from`). If `SmtpMailer` is configured 
 
 Note that `encryption: ''` is an explicit opt-out: with credentials supplied, `AUTH LOGIN` is then sent in the clear. The no-silent-downgrade guarantee applies to the `tls`/`ssl` modes only — it is not a promise that credentials are encrypted on every configuration.
 
-All user-supplied values that end up in message headers (display name, subject, custom header names/values, charset, attachment names and types) have CR/LF characters stripped at serialization time by the mailer driver, so no injected header line (e.g. `Bcc:`) can be smuggled in. Custom header names containing `:` are rejected. The `Mail` value object itself is wire-format agnostic and performs no CRLF filtering — header-safety is a driver responsibility. Custom headers override built-in ones of the same name in both drivers. A non-ASCII subject is RFC 2047 base64-encoded by both drivers.
+All user-supplied values that end up in message headers (display name, subject, custom header names/values, charset, attachment names and types) have CR/LF characters stripped at serialization time by the mailer driver, so no injected header line (e.g. `Bcc:`) can be smuggled in. Custom header names containing `:` are rejected. The `Mail` value object itself is wire-format agnostic and performs no CRLF filtering — header-safety is a driver responsibility. A custom header overrides a built-in one of the same name in both drivers, with one exception in the native driver — it builds `From`, `Reply-To`, `Cc`, `Bcc`, `MIME-Version`, `Content-Type`, `Content-Transfer-Encoding` and `X-Mailer` as headers, but hands the real recipients and subject to `mail()` as its own arguments rather than as headers, so a custom `To`/`Subject` header is appended alongside them and the delivered message carries both. The SMTP driver builds `To` and `Subject` itself, so it overrides them cleanly like any other built-in. A non-ASCII subject is RFC 2047 base64-encoded by both drivers; a non-ASCII display name is RFC 2047-encoded the same way and a non-ASCII attachment filename carries an RFC 2231 `name*`/`filename*` companion. Attachment `name` and `filename` values are escaped as quoted-strings.
 
-The display name is additionally escaped (`\` and `"`) by `Mail::getFormattedFrom()` before being wrapped in quotes, so it cannot break out of `"..."` and inject extra addresses into the `From` header.
+The display name is additionally escaped (`\` and `"`) by `Mail::getFormattedFrom()` before being wrapped in quotes, so it cannot break out of `"..."` and inject extra addresses into the `From` header; a non-ASCII display name is emitted as an RFC 2047 encoded-word instead.
 
 The `Mail` constructor validates all email addresses (`from`, `to`, `cc`, `bcc`, `replyTo`) just like the `with*` methods, so `new Mail(to: [...])` is just as safe as `(new Mail())->withTo(...)`.
 
@@ -126,7 +126,7 @@ The `Mail` constructor validates all email addresses (`from`, `to`, `cc`, `bcc`,
 Because `NativeMailer` delegates to PHP's `mail()`, whose first argument always becomes the `To:` header, two capabilities differ from `SmtpMailer`:
 
 - **cc/bcc-only messages.** `SmtpMailer` accepts a message with no `to` recipients (it delivers to the `cc`/`bcc` envelope). `NativeMailer` rejects it with `No recipient specified`, since `mail()` has no way to deliver to a `cc`/`bcc` address without also exposing it as the `To:` header.
-- **`Bcc` header.** `SmtpMailer` never writes a `Bcc:` header (it only issues `RCPT TO` for those addresses). `NativeMailer` passes `Bcc:` in the headers and relies on the local MTA to strip it, which is the standard `mail()` practice.
+- **`Bcc` header.** `SmtpMailer` writes no built-in `Bcc:` header of its own (it only issues `RCPT TO` for those addresses); a custom `Bcc` supplied via `withHeaders()` is written through verbatim like any other custom header. `NativeMailer` passes `Bcc:` in the headers and relies on the local MTA to strip it, which is the standard `mail()` practice.
 
 For testing, `SmtpMailer` accepts an optional injected `MiGears\Mail\Transport\SmtpTransport` (see the `SocketSmtpTransport` default implementation); `NativeMailer` exposes a protected `deliver()` seam over `mail()`.
 
@@ -173,7 +173,7 @@ MIT
 
 - 不可变的 `Mail` 值对象及其链式 `with*` API —— 发件人、to/cc/bcc、reply-to、主题、HTML 或纯文本正文、charset、自定义头以及基于文件路径的附件；地址在设置时用 `filter_var` 校验，可阻断 CRLF 头注入。
 - `MailerInterface::send(Mail): void` 契约及两个内置驱动：基于 PHP `mail()` 的 `NativeMailer`，以及通过 socket/stream 讲 SMTP 的 `SmtpMailer`；同时提供可注入的 `Transport\SmtpTransport` 抽象及其默认实现 `SocketSmtpTransport`。
-- 由驱动负责的报文序列化：组装邮件头与 MIME 分部、剥离用户输入头值中的 CR/LF、对非 ASCII 主题做 RFC 2047 base64 编码、STARTTLS/SSL 升级与 `AUTH LOGIN`；所有失败统一抛出 `MiGears\Mail\Exception\MailException`。
+- 由驱动负责的报文序列化：组装邮件头与 MIME 分部、剥离用户输入头值中的 CR/LF、转义带引号的 MIME 参数、对非 ASCII 主题与显示名做 RFC 2047 base64 编码、对非 ASCII 附件名做 RFC 2231 编码、STARTTLS/SSL 升级与 `AUTH LOGIN`；所有失败统一抛出 `MiGears\Mail\Exception\MailException`。
 
 **范围外（刻意不做）**
 
@@ -262,9 +262,9 @@ interface MailerInterface
 
 需要注意：`encryption: ''` 是显式的「不加密」选择——此时若提供了凭据，`AUTH LOGIN` 会以明文发送。「不静默降级」的保证只适用于 `tls`/`ssl` 模式，并不等于「任何配置下凭据都加密」。
 
-所有会进入邮件头的用户输入（显示名、主题、自定义头名与值、charset、附件名与类型）在序列化时由 Mailer 驱动剥离 CR/LF 字符，因此无法注入额外的头部行（如 `Bcc:`）。含冒号的自定义头名会被拒绝。`Mail` 值对象本身与传输格式无关，不做 CRLF 过滤——头部安全是驱动层的职责。两个驱动中同名自定义头均会覆盖内置头；非 ASCII 主题两个驱动都会做 RFC 2047 base64 编码。
+所有会进入邮件头的用户输入（显示名、主题、自定义头名与值、charset、附件名与类型）在序列化时由 Mailer 驱动剥离 CR/LF 字符，因此无法注入额外的头部行（如 `Bcc:`）。含冒号的自定义头名会被拒绝。`Mail` 值对象本身与传输格式无关，不做 CRLF 过滤——头部安全是驱动层的职责。两个驱动中同名自定义头都会覆盖同名内置头，但原生驱动有一个例外：它构建的头是 `From`、`Reply-To`、`Cc`、`Bcc`、`MIME-Version`、`Content-Type`、`Content-Transfer-Encoding` 与 `X-Mailer`，而真实的收件人与主题是作为 `mail()` 自身的参数传入、而非作为头构建的，因此自定义 `To`/`Subject` 头会被追加在其旁边，投递出的报文同时带有两份。SMTP 驱动自身构建 `To` 与 `Subject`，因此与其他内置头一样被干净覆盖。非 ASCII 主题与显示名按同样规则做 RFC 2047 编码，非 ASCII 附件名附带 RFC 2231 的 `name*`/`filename*`。附件的 `name` 与 `filename` 按带引号字符串转义。
 
-显示名的 `\` 与 `"` 转义由 `Mail::getFormattedFrom()` 完成（属格式化职责），因此无法突破 `"..."` 向 `From` 头注入额外地址。
+ASCII 显示名的 `\` 与 `"` 转义由 `Mail::getFormattedFrom()` 完成（属格式化职责），因此无法突破 `"..."` 向 `From` 头注入额外地址；非 ASCII 显示名则改为 RFC 2047 编码字。
 
 `Mail` 构造器与 `with*` 方法一样会校验全部邮箱地址（`from`、`to`、`cc`、`bcc`、`replyTo`），因此 `new Mail(to: [...])` 与 `(new Mail())->withTo(...)` 同样安全。
 
@@ -273,7 +273,7 @@ interface MailerInterface
 由于 `NativeMailer` 依赖 PHP 的 `mail()`，而 `mail()` 的第一个参数总会成为 `To:` 头，因此有两处能力与 `SmtpMailer` 不同：
 
 - **仅 cc/bcc 的邮件。** `SmtpMailer` 接受没有 `to` 收件人的邮件（通过 cc/bcc 信封投递）。`NativeMailer` 会以 `No recipient specified` 拒绝，因为 `mail()` 无法在不让 cc/bcc 地址暴露为 `To:` 头的前提下投递给它们。
-- **`Bcc` 头。** `SmtpMailer` 绝不写出 `Bcc:` 头（只为这些地址发 `RCPT TO`）。`NativeMailer` 会把 `Bcc:` 放进头部，依赖本地 MTA 剥离——这是 `mail()` 的标准做法。
+- **`Bcc` 头。** `SmtpMailer` 本身不写内置 `Bcc:` 头（只为这些地址发 `RCPT TO`）；经 `withHeaders()` 传入的自定义 `Bcc` 与其他自定义头一样原样写出。`NativeMailer` 会把 `Bcc:` 放进头部，依赖本地 MTA 剥离——这是 `mail()` 的标准做法。
 
 为便于测试，`SmtpMailer` 接受可选注入的 `MiGears\Mail\Transport\SmtpTransport`（默认实现为 `SocketSmtpTransport`）；`NativeMailer` 则暴露了一个包装 `mail()` 的 protected `deliver()` 接缝。
 

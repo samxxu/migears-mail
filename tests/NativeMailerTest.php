@@ -359,4 +359,55 @@ final class NativeMailerTest extends TestCase
             @unlink($file);
         }
     }
+
+    public function testNonAsciiDisplayNameAndAttachmentFilenameAreEncoded(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'mailatt') . '.pdf';
+        file_put_contents($file, 'x');
+        try {
+            $mailer = new CapturingNativeMailer();
+
+            $mail = (new Mail())
+                ->withFrom('from@example.com', '张三')
+                ->withTo('to@example.com')
+                ->withSubject('Test')
+                ->withBody('Body')
+                ->withAttachment($file, '报告.pdf', 'application/pdf');
+
+            $mailer->send($mail);
+
+            self::assertStringContainsString(
+                'From: =?utf-8?B?' . base64_encode('张三') . '?= <from@example.com>',
+                $mailer->headers
+            );
+            self::assertStringContainsString("name*=utf-8''" . rawurlencode('报告.pdf'), $mailer->body);
+            self::assertStringContainsString("filename*=utf-8''" . rawurlencode('报告.pdf'), $mailer->body);
+        } finally {
+            @unlink($file);
+        }
+    }
+
+    public function testAttachmentNameAndTypeWithQuotesAreEscaped(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'mailatt') . '.txt';
+        file_put_contents($file, 'x');
+        try {
+            $mailer = new CapturingNativeMailer();
+
+            $mail = (new Mail())
+                ->withFrom('from@example.com')
+                ->withTo('to@example.com')
+                ->withSubject('Test')
+                ->withBody('Body')
+                ->withAttachment($file, 'a"b.txt', 'text/plain; x="evil');
+
+            $mailer->send($mail);
+
+            self::assertStringContainsString('name="a\"b.txt"', $mailer->body);
+            self::assertStringContainsString('filename="a\"b.txt"', $mailer->body);
+            self::assertStringNotContainsString('x="evil', $mailer->body);
+        } finally {
+            @unlink($file);
+        }
+    }
 }

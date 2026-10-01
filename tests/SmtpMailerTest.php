@@ -703,4 +703,61 @@ final class SmtpMailerTest extends TestCase
         self::assertContains(base64_encode('user'), $cmds);
         self::assertContains(base64_encode('pass'), $cmds);
     }
+
+    public function testNonAsciiDisplayNameAndAttachmentFilenameAreEncoded(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'mail') . '.pdf';
+        file_put_contents($file, 'x');
+        try {
+            $transport = new FakeSmtpTransport();
+            $transport->responses = self::happyPathResponses();
+
+            $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
+            $mail = (new Mail())
+                ->withFrom('from@example.com', '张三')
+                ->withTo('to@example.com')
+                ->withSubject('Test')
+                ->withBody('Body')
+                ->withAttachment($file, '报告.pdf', 'application/pdf');
+
+            $mailer->send($mail);
+
+            $payload = $transport->payload();
+            self::assertStringContainsString(
+                'From: =?utf-8?B?' . base64_encode('张三') . '?= <from@example.com>',
+                $payload
+            );
+            self::assertStringContainsString("name*=utf-8''" . rawurlencode('报告.pdf'), $payload);
+            self::assertStringContainsString("filename*=utf-8''" . rawurlencode('报告.pdf'), $payload);
+        } finally {
+            @unlink($file);
+        }
+    }
+
+    public function testAttachmentNameAndTypeWithQuotesAreEscaped(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'mail') . '.txt';
+        file_put_contents($file, 'x');
+        try {
+            $transport = new FakeSmtpTransport();
+            $transport->responses = self::happyPathResponses();
+
+            $mailer = new SmtpMailer('smtp.example.com', 25, transport: $transport);
+            $mail = (new Mail())
+                ->withFrom('from@example.com')
+                ->withTo('to@example.com')
+                ->withSubject('Test')
+                ->withBody('Body')
+                ->withAttachment($file, 'a"b.txt', 'text/plain; x="evil');
+
+            $mailer->send($mail);
+
+            $payload = $transport->payload();
+            self::assertStringContainsString('name="a\"b.txt"', $payload);
+            self::assertStringContainsString('filename="a\"b.txt"', $payload);
+            self::assertStringNotContainsString('x="evil', $payload);
+        } finally {
+            @unlink($file);
+        }
+    }
 }

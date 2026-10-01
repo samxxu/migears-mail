@@ -94,7 +94,7 @@ class SmtpMailer implements MailerInterface
     {
         $boundary = $mail->hasAttachments() ? '----=_Part_' . md5(uniqid()) : null;
         $headers = [
-            'From' => $mail->getFormattedFrom(),
+            'From' => $this->formatFrom($mail),
             'Subject' => $this->encodeSubject($mail->subject, $mail->charset),
             'MIME-Version' => '1.0',
             'Date' => date('r'),
@@ -136,7 +136,7 @@ class SmtpMailer implements MailerInterface
             $body .= "Content-Transfer-Encoding: base64\r\n\r\n";
             $body .= chunk_split(base64_encode($mail->body)) . "\r\n";
             foreach ($mail->attachments as $att) {
-                $body .= $this->buildAttachmentPart($att, $boundary);
+                $body .= $this->buildAttachmentPart($att, $boundary, $mail->charset);
             }
             $body .= '--' . $boundary . '--';
         } else {
@@ -147,11 +147,13 @@ class SmtpMailer implements MailerInterface
     }
 
     /** @param array{path: string, name: ?string, type: ?string} $att */
-    private function buildAttachmentPart(array $att, string $boundary): string
+    private function buildAttachmentPart(array $att, string $boundary, string $charset): string
     {
         $filePath = $att['path'];
         $fileName = $this->stripCrlf($att['name'] ?? basename($filePath));
-        $mimeType = $this->stripCrlf($att['type'] ?? 'application/octet-stream');
+        // A media type is a `type/subtype` token pair; `"` and `\` are not
+        // part of it and would break out of the `Content-Type:` value.
+        $mimeType = str_replace(['"', '\\'], '', $this->stripCrlf($att['type'] ?? 'application/octet-stream'));
 
         if (!is_file($filePath)) {
             throw MailException::from("Attachment not found: $filePath");
@@ -162,9 +164,9 @@ class SmtpMailer implements MailerInterface
         }
 
         return '--' . $boundary . "\r\n"
-            . 'Content-Type: ' . $mimeType . '; name="' . $fileName . '"' . "\r\n"
+            . 'Content-Type: ' . $mimeType . '; ' . $this->mimeParameter('name', $fileName, $charset) . "\r\n"
             . "Content-Transfer-Encoding: base64\r\n"
-            . 'Content-Disposition: attachment; filename="' . $fileName . '"' . "\r\n\r\n"
+            . 'Content-Disposition: attachment; ' . $this->mimeParameter('filename', $fileName, $charset) . "\r\n\r\n"
             . chunk_split(base64_encode($content)) . "\r\n";
     }
 
@@ -173,6 +175,42 @@ class SmtpMailer implements MailerInterface
         return preg_match('/[^\x20-\x7E]/', $subject)
             ? sprintf('=?%s?B?%s?=', $this->stripCrlf($charset), base64_encode($subject))
             : $this->stripCrlf($subject);
+    }
+
+    /**
+     * Formats the `From` value. A non-ASCII display name is RFC 2047
+     * base64-encoded as a phrase, the same way the subject is encoded, so a
+     * conforming client decodes it instead of showing raw bytes.
+     */
+    private function formatFrom(Mail $mail): string
+    {
+        if ($mail->fromName === '' || preg_match('/[^\x20-\x7E]/', $mail->fromName) !== 1) {
+            return $mail->getFormattedFrom();
+        }
+
+        return sprintf('=?%s?B?%s?= <%s>', $this->stripCrlf($mail->charset), base64_encode($mail->fromName), $mail->from);
+    }
+
+    /**
+     * A `name="value"` MIME parameter. The value is escaped as a quoted-string
+     * and, when it is not plain ASCII, an RFC 2231 `name*=` companion is added
+     * so conforming clients decode the real bytes.
+     */
+    private function mimeParameter(string $name, string $value, string $charset): string
+    {
+        if (preg_match('/[^\x20-\x7E]/', $value) !== 1) {
+            return $name . '="' . $this->escapeQuoted($value) . '"';
+        }
+
+        $fallback = (string) preg_replace('/[^\x20-\x7E]/', '_', $value);
+
+        return $name . '="' . $this->escapeQuoted($fallback) . '"; '
+            . $name . '*=' . $this->stripCrlf($charset) . "''" . rawurlencode($value);
+    }
+
+    private function escapeQuoted(string $value): string
+    {
+        return str_replace(['\\', '"'], ['\\\\', '\\"'], $value);
     }
 
     private function stripCrlf(string $value): string
