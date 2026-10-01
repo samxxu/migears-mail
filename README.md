@@ -20,6 +20,21 @@ A minimalist email sending library with zero required dependencies.
 - SMTP transport can be injected for testing
 - PSR-4 autoloading compliant
 
+## Boundaries
+
+**In scope**
+
+- The immutable `Mail` value object and its fluent `with*` API — sender, to/cc/bcc, reply-to, subject, HTML or plain body, charset, custom headers and file-path attachments; addresses are validated with `filter_var` on set, which also blocks CRLF header injection.
+- The `MailerInterface::send(Mail): void` contract and its two built-in drivers: `NativeMailer` over PHP's `mail()` and `SmtpMailer` speaking SMTP over a socket/stream, plus the injectable `Transport\SmtpTransport` abstraction and its default `SocketSmtpTransport`.
+- Wire serialization owned by the drivers: headers and MIME parts, stripping CR/LF from user-supplied header values, RFC 2047 base64-encoding of non-ASCII subjects, the STARTTLS/SSL upgrade and `AUTH LOGIN`; failures surface as `MiGears\Mail\Exception\MailException`.
+
+**Not in scope (by design)**
+
+- Queueing, retrying, scheduling or batching — `send()` is synchronous: connect, deliver once, throw on failure, with no store-and-forward. Async execution belongs to `migears/jobs`, which is itself explicitly queue-less.
+- Templating or rendering the body — no view engine, layout or partials; the caller supplies the final body string. Rendering belongs to `migears/template`.
+- Receiving mail — sending only: no POP3/IMAP client, no mailbox reading, no inbound MIME parsing.
+- MX/DNS resolution and any address book — `SmtpMailer` connects to the host you configure, and addresses are validated for RFC format only, not deliverability.
+
 ## Installation
 
 ```bash
@@ -151,6 +166,21 @@ MIT
 - 内置两种发送驱动：原生 `mail()` 函数和 SMTP
 - SMTP 传输层可注入以便测试
 - 符合 PSR-4 自动加载规范
+
+## 边界
+
+**范围内**
+
+- 不可变的 `Mail` 值对象及其链式 `with*` API —— 发件人、to/cc/bcc、reply-to、主题、HTML 或纯文本正文、charset、自定义头以及基于文件路径的附件；地址在设置时用 `filter_var` 校验，可阻断 CRLF 头注入。
+- `MailerInterface::send(Mail): void` 契约及两个内置驱动：基于 PHP `mail()` 的 `NativeMailer`，以及通过 socket/stream 讲 SMTP 的 `SmtpMailer`；同时提供可注入的 `Transport\SmtpTransport` 抽象及其默认实现 `SocketSmtpTransport`。
+- 由驱动负责的报文序列化：组装邮件头与 MIME 分部、剥离用户输入头值中的 CR/LF、对非 ASCII 主题做 RFC 2047 base64 编码、STARTTLS/SSL 升级与 `AUTH LOGIN`；所有失败统一抛出 `MiGears\Mail\Exception\MailException`。
+
+**范围外（刻意不做）**
+
+- 排队、重试、调度或批量发送 —— `send()` 是同步的：连接、投递一次、失败即抛，不做存储转发。异步执行属于 `migears/jobs`，而后者自身也明确不做队列。
+- 模板渲染正文 —— 不含视图引擎、布局或分部；正文由调用方传入最终字符串。渲染属于 `migears/template`。
+- 收信 —— 只负责发送：没有 POP3/IMAP 客户端、不读信箱，也不解析入站邮件的 MIME。
+- MX/DNS 解析与通讯录 —— `SmtpMailer` 只连接你配置的主机；地址仅按 RFC 格式校验，不校验可达性。
 
 ## 安装
 
